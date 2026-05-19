@@ -18,6 +18,7 @@ export default function QuickInbox({ onAdd }: Props) {
   const [items, setItems] = useState<string[]>([])
   const [processed, setProcessed] = useState<{text: string; cat: Category; priority: 'urgent'|'soon'|'normal'}[]>([])
   const [step, setStep] = useState<'input'|'review'>('input')
+  const [loading, setLoading] = useState(false)
 
   const addItem = (t: string) => {
     if (!t.trim()) return
@@ -25,22 +26,41 @@ export default function QuickInbox({ onAdd }: Props) {
     setText('')
   }
 
-  const smartSort = () => {
+  const smartSort = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/sort-inbox', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      })
+      if (res.ok) {
+        const { result } = await res.json()
+        setProcessed(result)
+        setStep('review')
+      } else {
+        fallbackSort()
+      }
+    } catch {
+      fallbackSort()
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fallbackSort = () => {
     const result = items.map(text => {
       const lower = text.toLowerCase()
       let cat: Category = 'home'
       let priority: 'urgent'|'soon'|'normal' = 'normal'
-
       if (/רופא|תור|מרשם|חיסון|ריפוי|אורתופד|ביטוח בריאות/.test(lower)) cat = 'medical'
       else if (/לימוד|עבודה|בוחן|מבחן|קורס/.test(lower)) cat = 'studies'
       else if (/חוג|שחיי|ציור|מוזיקה|ריקוד|טיפול/.test(lower)) cat = 'hobbies'
       else if (/גן|בית ספר|אסיפה|קייטנה|מסגרת/.test(lower)) cat = 'formal'
       else if (/כסף|לשלם|ביטוח לאומי|חשבון|תשלום|מס/.test(lower)) cat = 'finance'
       else if (/מילואים|ציוד|צבא/.test(lower)) cat = 'miluim'
-
       if (/דחוף|מיד|היום|חירום/.test(lower)) priority = 'urgent'
       else if (/השבוע|בקרוב/.test(lower)) priority = 'soon'
-
       return { text, cat, priority }
     })
     setProcessed(result)
@@ -149,10 +169,10 @@ export default function QuickInbox({ onAdd }: Props) {
               <button onClick={() => setItems(p => p.filter((_, idx) => idx !== i))} className="text-gray-600 hover:text-red-400 transition-all">✕</button>
             </div>
           ))}
-          <button onClick={smartSort}
-            className="w-full py-3 rounded-2xl text-sm font-bold text-white mt-2"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)' }}>
-            ✨ סווג אוטומטית
+          <button onClick={smartSort} disabled={loading}
+            className="w-full py-3 rounded-2xl text-sm font-bold text-white mt-2 transition-opacity"
+            style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', opacity: loading ? 0.7 : 1 }}>
+            {loading ? '⏳ מסווג עם AI...' : '✨ סווג אוטומטית'}
           </button>
         </div>
       )}

@@ -38,6 +38,10 @@ ${items.map((t: string, i: number) => `${i + 1}. ${t}`).join('\n')}`
   })
 
   const raw = (message.content[0] as { type: string; text: string }).text.trim()
-  const parsed = JSON.parse(raw)
-  return NextResponse.json({ result: parsed })
+  // strip markdown code fences if present
+  const cleaned = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
+  const parsed = JSON.parse(cleaned)
+  // ensure it's always an array
+  const result = Array.isArray(parsed) ? parsed : [parsed]
+  return NextResponse.json({ result })
 }

@@ -15,6 +15,20 @@ function dueDateInfo(due: string | null) {
 }
 function fmt(s: string) { const [,m,d] = s.split('-'); return `${d}/${m}` }
 
+function gcalUrl(task: Task) {
+  const date = task.due_date!.replace(/-/g, '')
+  const next = new Date(task.due_date!)
+  next.setDate(next.getDate() + 1)
+  const end = next.toISOString().split('T')[0].replace(/-/g, '')
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: task.text,
+    dates: `${date}/${end}`,
+    details: task.note || '',
+  })
+  return `https://calendar.google.com/calendar/render?${params}`
+}
+
 const PRIORITY_STYLES: Record<string, { label: string; bg: string; color: string }> = {
   urgent: { label: '🔴 דחוף',  bg: 'rgba(248,113,113,0.15)', color: '#f87171' },
   soon:   { label: '🟠 השבוע', bg: 'rgba(251,146,60,0.15)',  color: '#fb923c' },
@@ -82,6 +96,12 @@ export default function TaskItem({ task, onToggle, onEdit, onDelete, compact }: 
       {/* Right side */}
       <div className="flex-shrink-0 flex items-center gap-2">
         <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+          {task.due_date && !task.done && (
+            <a href={gcalUrl(task)} target="_blank" rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-xs hover:bg-white/10 text-gray-500 hover:text-blue-400 transition-all"
+              title="הוסף ליומן גוגל">📅</a>
+          )}
           <button onClick={e => { e.stopPropagation(); onEdit(task) }}
             className="w-7 h-7 rounded-lg flex items-center justify-center text-xs hover:bg-white/10 text-gray-500 hover:text-white transition-all">✏️</button>
           {onDelete && <button onClick={e => { e.stopPropagation(); onDelete(task.id) }}

@@ -34,7 +34,7 @@ const CAT_LABEL: Record<string, string> = {
   formal: 'מסגרות 🏫', hobbies: 'חוגים 🎨', finance: 'כספים 💰', miluim: 'מילואים 🪖',
 }
 const PRI_ICON: Record<string, string> = { urgent: '🔥', soon: '⏰', normal: '📌', low: '· ' }
-const ASGN_LABEL: Record<string, string> = { adi: 'עדי', tahel: 'תהלה', both: 'שנינו' }
+const ASGN_LABEL: Record<string, string> = { adi: 'עדי', tahel: 'תהלה', tehila: 'תהלה', both: 'שנינו' }
 
 function fmtDate(iso: string | null): string {
   if (!iso) return ''
@@ -84,7 +84,7 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-async function queryTasks(familyId: string, filter: 'today' | 'week' | 'urgent' | 'list', role: 'adi' | 'tehila') {
+async function queryTasks(familyId: string, filter: 'today' | 'week' | 'urgent' | 'list', role: 'adi' | 'tahel') {
   const today = new Date().toISOString().split('T')[0]
   const weekEnd = new Date(); weekEnd.setDate(weekEnd.getDate() + 7)
   const weekEndStr = weekEnd.toISOString().split('T')[0]
@@ -177,43 +177,48 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
+  // Normalize commands: strip @bot_username suffix and lowercase
+  // (Telegram clients append @bot_name when picking from the bot menu)
+  const isCmd = text.startsWith('/')
+  const cmd = isCmd ? text.split(/[\s@]/)[0].toLowerCase() : ''
+
   // Commands
-  if (text === '/start' || text === '/help') {
+  if (cmd === '/start' || cmd === '/help') {
     await sendMessage(chatId, HELP_TEXT)
     return NextResponse.json({ ok: true })
   }
 
-  const role = tgUser.member_role as 'adi' | 'tehila'
+  const role = tgUser.member_role as 'adi' | 'tahel'
 
-  if (text === '/today') {
+  if (cmd === '/today') {
     const tasks = await queryTasks(tgUser.family_id, 'today', role)
     const members = await loadMembers(tgUser.family_id)
     await sendMessage(chatId, formatTaskList('היום + באיחור', tasks, members))
     return NextResponse.json({ ok: true })
   }
 
-  if (text === '/week') {
+  if (cmd === '/week') {
     const tasks = await queryTasks(tgUser.family_id, 'week', role)
     const members = await loadMembers(tgUser.family_id)
     await sendMessage(chatId, formatTaskList('השבוע הקרוב', tasks, members))
     return NextResponse.json({ ok: true })
   }
 
-  if (text === '/urgent') {
+  if (cmd === '/urgent') {
     const tasks = await queryTasks(tgUser.family_id, 'urgent', role)
     const members = await loadMembers(tgUser.family_id)
     await sendMessage(chatId, formatTaskList('דחוף 🔥', tasks, members))
     return NextResponse.json({ ok: true })
   }
 
-  if (text === '/list') {
+  if (cmd === '/list') {
     const tasks = await queryTasks(tgUser.family_id, 'list', role)
     const members = await loadMembers(tgUser.family_id)
     await sendMessage(chatId, formatTaskList('כל המטלות שלי', tasks, members))
     return NextResponse.json({ ok: true })
   }
 
-  if (text.startsWith('/')) {
+  if (isCmd) {
     await sendMessage(chatId, 'פקודה לא מוכרת. שלח /help לרשימת פקודות.')
     return NextResponse.json({ ok: true })
   }

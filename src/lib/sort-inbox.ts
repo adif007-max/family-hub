@@ -47,10 +47,12 @@ function buildPrompt(items: string[], members: Member[]): string {
 - soon: השבוע, בקרוב
 - normal: ברירת מחדל
 
-הקצאה (מי יבצע):
+הקצאה (מי יבצע) — חובה אחד משלושה ערכים בלבד: "adi", "tahel", "both":
 - adi: עדי (אם נאמר "אני אקנה" / "עדי יעשה")
 - tahel: תהלה (אם נאמר "תהלה תקבע" / "אשתי תעשה")
 - both: ברירת מחדל אם לא ברור
+
+חשוב: ילדים אף פעם לא assignee! גם אם מטלה היא עבור ילד ("תור שיניים לנעמי", "אסיפת הורים להלל") — ה-assignee הוא ההורה שיבצע (adi/tahel/both), והילד נכנס ל-related_member_ids בלבד.
 ${membersBlock}
 חשוב: אם פריט מכיל מספר מטלות שונות (מופרדות ב-+, פסיק, או "ו"), פצל למספר אובייקטים.
 
@@ -80,12 +82,19 @@ export async function sortInbox(items: string[], familyId: string): Promise<Sort
   const parsed = JSON.parse(cleaned)
   const arr = Array.isArray(parsed) ? parsed : [parsed]
 
-  // Normalize: ensure all fields present with safe defaults
+  const VALID_ASSIGNEE = new Set(['adi', 'tahel', 'both'])
+  const VALID_PRIORITY = new Set(['urgent', 'soon', 'normal'])
+  const VALID_CAT = new Set(['home','medical','studies','hobbies','formal','finance','miluim'])
+  const memberIds = new Set(members.map(m => m.id))
+
+  // Normalize: ensure all fields present with safe defaults; reject invalid values
   return arr.map((x: Partial<SortedItem>) => ({
     text: x.text || '',
-    cat: x.cat || 'home',
-    priority: x.priority || 'normal',
-    assignee: x.assignee || 'both',
-    related_member_ids: Array.isArray(x.related_member_ids) ? x.related_member_ids : [],
-  })) as SortedItem[]
+    cat: (x.cat && VALID_CAT.has(x.cat) ? x.cat : 'home') as SortedItem['cat'],
+    priority: (x.priority && VALID_PRIORITY.has(x.priority) ? x.priority : 'normal') as SortedItem['priority'],
+    assignee: (x.assignee && VALID_ASSIGNEE.has(x.assignee) ? x.assignee : 'both') as SortedItem['assignee'],
+    related_member_ids: Array.isArray(x.related_member_ids)
+      ? x.related_member_ids.filter(id => memberIds.has(id))
+      : [],
+  }))
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { Task } from '@/lib/types'
+import { Task, FamilyMember } from '@/lib/types'
 
 function today() { return new Date().toISOString().split('T')[0] }
 
@@ -44,13 +44,19 @@ const RECUR: Record<string, string> = { daily: '🔄 יומי', weekly: '🔄 ש
 
 interface Props {
   task: Task
+  members?: FamilyMember[]
   onToggle: (id: string) => void
   onEdit: (task: Task) => void
   onDelete?: (id: string) => void
   compact?: boolean
 }
 
-export default function TaskItem({ task, onToggle, onEdit, onDelete, compact }: Props) {
+export default function TaskItem({ task, members = [], onToggle, onEdit, onDelete, compact }: Props) {
+  const relatedMembers = task.related_member_ids
+    ? task.related_member_ids
+        .map(id => members.find(m => m.id === id))
+        .filter((m): m is FamilyMember => Boolean(m))
+    : []
   const due = dueDateInfo(task.due_date)
   const pri = PRIORITY_STYLES[task.priority]
   const asgn = ASSIGNEE[task.assignee]
@@ -88,6 +94,12 @@ export default function TaskItem({ task, onToggle, onEdit, onDelete, compact }: 
             {task.done && <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(52,211,153,0.12)', color: '#34d399' }}>✓ הושלם</span>}
             {due && !task.done && <span className="text-xs" style={{ color: due.cls }}>📅 {due.label}</span>}
             {task.recur && <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)', color: '#60a5fa' }}>{RECUR[task.recur]}</span>}
+            {relatedMembers.map(m => (
+              <span key={m.id} className="text-xs px-1.5 py-0.5 rounded-full"
+                style={{ background: 'rgba(244,114,182,0.10)', border: '1px solid rgba(244,114,182,0.25)', color: '#f9a8d4' }}>
+                {m.gender === 'female' ? '👧' : '👦'} {m.name}
+              </span>
+            ))}
           </div>
         )}
         {task.note && !compact && <div className="text-xs text-gray-500 mt-1 truncate">💬 {task.note}</div>}

@@ -37,6 +37,7 @@ export default function TaskModal({ task, defaultCategory, onSave, onClose }: Pr
       due_date: due || null, recur, note: note.trim(),
       done: task?.done || false, done_at: task?.done_at || null,
       stuck_since: task?.stuck_since || null, family_id: 'fink',
+      related_member_ids: task?.related_member_ids || [],
     }
     onSave(t)
   }

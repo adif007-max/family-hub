@@ -9,13 +9,27 @@ Next.js 16 family task manager for עדי ותהלה (family `fink`).
 - AI inbox sort: Claude Haiku via `/api/sort-inbox`
 
 ## Architecture
-- `src/lib/supabase.ts` — singleton client, PKCE flow, persists session in localStorage
+- `src/lib/supabase.ts` — singleton browser client, PKCE flow, persists session in localStorage
+- `src/lib/supabase-admin.ts` — **server-only** client using service-role key (Telegram webhook, never import in client code)
 - `src/lib/useAuth.ts` — auth state + family_id lookup; exposes `signIn` (magic link), `signInWithGoogle`, `signOut`
 - `src/lib/useTasks.ts` — realtime tasks hook (subscribe + CRUD + one-time localStorage migration)
+- `src/lib/useMembers.ts` — realtime family_members hook (CRUD + archive)
+- `src/lib/sort-inbox.ts` — shared sort logic (Claude Haiku); used by web API + Telegram webhook
 - `src/app/page.tsx` — gates on auth, renders 2 tabs (Inbox primary, Tasks)
-- `src/components/QuickInbox.tsx` — calls `/api/sort-inbox` (Claude Haiku) for categorization
-- `src/components/TaskBoard.tsx` — categories + time filters (today/week/overdue/urgent) + load balance
-- `supabase-schema.sql` — full schema with RLS, trigger-based profile creation, allowed_emails allowlist
+- `src/components/QuickInbox.tsx` — calls `/api/sort-inbox`; review screen with category/priority/assignee/children edit
+- `src/components/TaskBoard.tsx` — children filter row + time filters + assignee + load balance
+- `src/components/TaskItem.tsx` — chips: priority/due/recur/children + GCal button
+- `src/app/api/sort-inbox/route.ts` — receives { items, familyId }, calls `sortInbox()`
+- `src/app/api/telegram/webhook/route.ts` — Telegram bot; secret-token verified; commands + free-text sort
+- `src/app/settings/family/page.tsx` — edit/add/archive children
+- `supabase-schema.sql` — base schema (RLS, profiles, allowed_emails)
+- `supabase-migrations/002_telegram_and_members.sql` — telegram_users, family_members, tasks.related_member_ids
+
+## Data model decisions
+- `family_id` is `text` (literal `'fink'`), not uuid → matches existing schema
+- `assignee` ('adi'/'tehila'/'both') is reused for the "who does it" feature; no new `assigned_to` column
+- `tasks.related_member_ids` is `uuid[]` referencing `family_members.id` — many-to-many via array (no junction table; family is small)
+- `telegram_users` has no RLS policy on purpose — only service role can read
 
 ## Auth model
 - Allowlist in `allowed_emails` (currently: adif007@gmail.com, tehila1000@gmail.com → family_id `fink`)
@@ -43,6 +57,12 @@ git add -A && git commit -m "..." && git push
 ```
 
 ## Environment variables (Vercel)
+Client-exposed:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` (publishable key from Supabase)
-- `ANTHROPIC_API_KEY` (for /api/sort-inbox)
+
+Server-only:
+- `ANTHROPIC_API_KEY` — Claude Haiku for inbox sort
+- `SUPABASE_SERVICE_ROLE_KEY` — required for Telegram webhook to bypass RLS
+- `TELEGRAM_BOT_TOKEN` — from @BotFather
+- `TELEGRAM_WEBHOOK_SECRET` — random 32-byte hex, verified on every webhook request

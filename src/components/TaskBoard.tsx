@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { Task, Category, CATEGORIES } from '@/lib/types'
+import { Task, Category, CATEGORIES, FamilyMember } from '@/lib/types'
 import TaskItem from './TaskItem'
 
 interface Props {
   tasks: Task[]
+  members: FamilyMember[]
   onToggle: (id: string) => void
   onEdit: (task: Task) => void
   onDelete: (id: string) => void
@@ -20,10 +21,11 @@ function plusDays(n: number) {
   return d.toISOString().split('T')[0]
 }
 
-export default function TaskBoard({ tasks, onToggle, onEdit, onDelete, onAdd }: Props) {
+export default function TaskBoard({ tasks, members, onToggle, onEdit, onDelete, onAdd }: Props) {
   const [search, setSearch] = useState('')
   const [filterAssignee, setFilterAssignee] = useState<string>('all')
   const [filterTime, setFilterTime] = useState<TimeFilter>('all')
+  const [filterMember, setFilterMember] = useState<string>('all')
   const [hideDone, setHideDone] = useState(true)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
 
@@ -34,6 +36,7 @@ export default function TaskBoard({ tasks, onToggle, onEdit, onDelete, onAdd }: 
     if (hideDone && t.done) return false
     if (filterAssignee === 'adi' && t.assignee !== 'adi' && t.assignee !== 'both') return false
     if (filterAssignee === 'tahel' && t.assignee !== 'tahel' && t.assignee !== 'both') return false
+    if (filterMember !== 'all' && !(t.related_member_ids || []).includes(filterMember)) return false
 
     if (filterTime === 'today' && t.due_date !== todayStr) return false
     if (filterTime === 'week') {
@@ -98,6 +101,28 @@ export default function TaskBoard({ tasks, onToggle, onEdit, onDelete, onAdd }: 
         className="w-full px-4 py-2.5 rounded-xl text-sm outline-none text-white"
         style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.09)' }}
         placeholder="🔍 חיפוש מטלה..." />
+
+      {/* Children filter */}
+      {members.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          <button onClick={() => setFilterMember('all')}
+            className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
+            style={filterMember === 'all'
+              ? { background: 'rgba(244,114,182,0.12)', border: '1px solid rgba(244,114,182,0.35)', color: '#f9a8d4' }
+              : { border: '1px solid rgba(255,255,255,0.08)', color: '#6b7280' }}>
+            👨‍👩‍👧‍👦 כולם
+          </button>
+          {members.map(m => (
+            <button key={m.id} onClick={() => setFilterMember(m.id)}
+              className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
+              style={filterMember === m.id
+                ? { background: 'rgba(244,114,182,0.15)', border: '1px solid rgba(244,114,182,0.45)', color: '#f9a8d4' }
+                : { border: '1px solid rgba(255,255,255,0.08)', color: '#6b7280' }}>
+              {m.gender === 'female' ? '👧' : '👦'} {m.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Time filters */}
       <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
@@ -174,7 +199,7 @@ export default function TaskBoard({ tasks, onToggle, onEdit, onDelete, onAdd }: 
 
             {!isCollapsed && (
               <div className="px-4 pb-4 space-y-2">
-                {catTasks.map(t => <TaskItem key={t.id} task={t} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} />)}
+                {catTasks.map(t => <TaskItem key={t.id} task={t} members={members} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} />)}
                 <button onClick={() => onAdd(cat.id)}
                   className="w-full py-2 rounded-xl text-xs text-gray-600 transition-all hover:text-purple-400"
                   style={{ border: '1px dashed rgba(255,255,255,0.1)' }}>

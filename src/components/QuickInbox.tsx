@@ -1,9 +1,21 @@
 'use client'
 
 import { useState } from 'react'
-import { Task, Category, CATEGORIES } from '@/lib/types'
+import { Task, Category, CATEGORIES, FamilyMember, Assignee } from '@/lib/types'
 
-interface Props { onAdd: (task: Task) => void }
+interface SortedItem {
+  text: string
+  cat: Category
+  priority: 'urgent' | 'soon' | 'normal'
+  assignee: Assignee
+  related_member_ids: string[]
+}
+
+interface Props {
+  onAdd: (task: Partial<Task>) => void
+  familyId: string
+  members: FamilyMember[]
+}
 
 const SUGGESTIONS = [
   'לקנות חלב',
@@ -13,12 +25,16 @@ const SUGGESTIONS = [
   'אסיפת הורים — רחל',
 ]
 
-export default function QuickInbox({ onAdd }: Props) {
+const ASSIGNEE_LABEL: Record<Assignee, string> = { adi: '👨 עדי', tahel: '👩 תהלה', both: '👨‍👩 שנינו' }
+
+export default function QuickInbox({ onAdd, familyId, members }: Props) {
   const [text, setText] = useState('')
   const [items, setItems] = useState<string[]>([])
-  const [processed, setProcessed] = useState<{text: string; cat: Category; priority: 'urgent'|'soon'|'normal'}[]>([])
-  const [step, setStep] = useState<'input'|'review'>('input')
+  const [processed, setProcessed] = useState<SortedItem[]>([])
+  const [step, setStep] = useState<'input' | 'review'>('input')
   const [loading, setLoading] = useState(false)
+
+  const memberById = (id: string) => members.find(m => m.id === id)
 
   const addItem = (t: string) => {
     if (!t.trim()) return
@@ -32,7 +48,7 @@ export default function QuickInbox({ onAdd }: Props) {
       const res = await fetch('/api/sort-inbox', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items, familyId }),
       })
       if (res.ok) {
         const { result } = await res.json()
@@ -49,10 +65,10 @@ export default function QuickInbox({ onAdd }: Props) {
   }
 
   const fallbackSort = () => {
-    const result = items.map(text => {
+    const result: SortedItem[] = items.map(text => {
       const lower = text.toLowerCase()
       let cat: Category = 'home'
-      let priority: 'urgent'|'soon'|'normal' = 'normal'
+      let priority: 'urgent' | 'soon' | 'normal' = 'normal'
       if (/רופא|תור|מרשם|חיסון|ריפוי|אורתופד|ביטוח בריאות/.test(lower)) cat = 'medical'
       else if (/לימוד|עבודה|בוחן|מבחן|קורס/.test(lower)) cat = 'studies'
       else if (/חוג|שחיי|ציור|מוזיקה|ריקוד|טיפול/.test(lower)) cat = 'hobbies'
@@ -61,7 +77,10 @@ export default function QuickInbox({ onAdd }: Props) {
       else if (/מילואים|ציוד|צבא/.test(lower)) cat = 'miluim'
       if (/דחוף|מיד|היום|חירום/.test(lower)) priority = 'urgent'
       else if (/השבוע|בקרוב/.test(lower)) priority = 'soon'
-      return { text, cat, priority }
+
+      // crude name detection for fallback only
+      const related = members.filter(m => text.includes(m.name)).map(m => m.id)
+      return { text, cat, priority, assignee: 'both', related_member_ids: related }
     })
     setProcessed(result)
     setStep('review')
@@ -69,21 +88,36 @@ export default function QuickInbox({ onAdd }: Props) {
 
   const confirmAll = () => {
     processed.forEach(p => {
-      const task: Task = {
-        id: String(Date.now() + Math.random()),
-        created_at: new Date().toISOString(),
-        text: p.text, category: p.cat,
-        assignee: 'adi', priority: p.priority,
-        due_date: null, recur: '', note: '',
-        done: false, done_at: null, stuck_since: null, family_id: 'fink',
-      }
-      onAdd(task)
+      onAdd({
+        text: p.text,
+        category: p.cat,
+        assignee: p.assignee,
+        priority: p.priority,
+        due_date: null,
+        recur: '',
+        note: '',
+        done: false,
+        related_member_ids: p.related_member_ids,
+      })
     })
     setItems([]); setProcessed([]); setStep('input')
   }
 
-  const updateProcessed = (i: number, field: 'cat'|'priority', val: string) => {
+  const updateProcessed = <K extends keyof SortedItem>(i: number, field: K, val: SortedItem[K]) => {
     setProcessed(p => p.map((item, idx) => idx === i ? { ...item, [field]: val } : item))
+  }
+
+  const toggleMember = (i: number, memberId: string) => {
+    setProcessed(p => p.map((item, idx) => {
+      if (idx !== i) return item
+      const has = item.related_member_ids.includes(memberId)
+      return {
+        ...item,
+        related_member_ids: has
+          ? item.related_member_ids.filter(id => id !== memberId)
+          : [...item.related_member_ids, memberId],
+      }
+    }))
   }
 
   if (step === 'review') {
@@ -97,20 +131,46 @@ export default function QuickInbox({ onAdd }: Props) {
           {processed.map((item, i) => (
             <div key={i} className="rounded-2xl p-4 space-y-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
               <div className="font-semibold text-sm">{item.text}</div>
+
+              {/* Category + Priority + Assignee */}
               <div className="flex gap-2 flex-wrap">
-                <select value={item.cat} onChange={e => updateProcessed(i, 'cat', e.target.value)}
+                <select value={item.cat} onChange={e => updateProcessed(i, 'cat', e.target.value as Category)}
                   className="px-3 py-1.5 rounded-xl text-xs outline-none text-white"
                   style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}>
                   {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
                 </select>
-                <select value={item.priority} onChange={e => updateProcessed(i, 'priority', e.target.value)}
+                <select value={item.priority} onChange={e => updateProcessed(i, 'priority', e.target.value as SortedItem['priority'])}
                   className="px-3 py-1.5 rounded-xl text-xs outline-none text-white"
                   style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}>
                   <option value="urgent">🔴 דחוף</option>
                   <option value="soon">🟠 השבוע</option>
                   <option value="normal">🟣 רגיל</option>
                 </select>
+                <select value={item.assignee} onChange={e => updateProcessed(i, 'assignee', e.target.value as Assignee)}
+                  className="px-3 py-1.5 rounded-xl text-xs outline-none text-white"
+                  style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  {(['adi','tahel','both'] as const).map(a => <option key={a} value={a}>{ASSIGNEE_LABEL[a]}</option>)}
+                </select>
               </div>
+
+              {/* Children chips (multi-select) */}
+              {members.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {members.map(m => {
+                    const active = item.related_member_ids.includes(m.id)
+                    const emoji = m.gender === 'female' ? '👧' : '👦'
+                    return (
+                      <button key={m.id} onClick={() => toggleMember(i, m.id)}
+                        className="px-2.5 py-1 rounded-full text-xs transition-all"
+                        style={active
+                          ? { background: 'rgba(244,114,182,0.15)', border: '1px solid rgba(244,114,182,0.4)', color: '#f9a8d4' }
+                          : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#9ca3af' }}>
+                        {emoji} {m.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -130,7 +190,7 @@ export default function QuickInbox({ onAdd }: Props) {
     <div className="animate-fade-in space-y-5">
       <div>
         <div className="text-lg font-extrabold mb-1">📥 Quick Inbox</div>
-        <div className="text-sm text-gray-400">זרוק מחשבות — ממיין אוטומטית לקטגוריות</div>
+        <div className="text-sm text-gray-400">זרוק מחשבות — ממיין אוטומטית לקטגוריות וילדים</div>
       </div>
 
       <div className="flex gap-2">
@@ -180,7 +240,7 @@ export default function QuickInbox({ onAdd }: Props) {
       {items.length === 0 && (
         <div className="text-center py-10 text-gray-600">
           <div className="text-4xl mb-3">📥</div>
-          <div className="text-sm">כתוב מה שעל הלב —<br />המערכת תמיין לקטגוריות</div>
+          <div className="text-sm">כתוב מה שעל הלב —<br />המערכת תמיין לקטגוריות וילדים</div>
         </div>
       )}
     </div>

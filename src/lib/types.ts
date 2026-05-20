@@ -17,6 +17,17 @@ export interface Task {
   done_at: string | null
   stuck_since: string | null
   family_id: string
+  related_member_ids: string[]
+}
+
+export interface FamilyMember {
+  id: string
+  family_id: string
+  name: string
+  nicknames: string[]
+  birth_date: string | null
+  gender: 'male' | 'female' | null
+  is_active: boolean
 }
 
 export const CATEGORIES: { id: Category; name: string; icon: string; color: string }[] = [

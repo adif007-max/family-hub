@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { Task, Category } from '@/lib/types'
 import { useAuth } from '@/lib/useAuth'
 import { useTasks } from '@/lib/useTasks'
+import { useMembers } from '@/lib/useMembers'
 import TaskModal from '@/components/TaskModal'
 import TaskBoard from '@/components/TaskBoard'
 import QuickInbox from '@/components/QuickInbox'
@@ -27,6 +29,7 @@ function Loader() {
 export default function Home() {
   const { session, familyId, loading: authLoading, signOut } = useAuth()
   const { tasks, loading: tasksLoading, addTask, saveTask, toggleDone, deleteTask } = useTasks(familyId)
+  const { members } = useMembers(familyId)
 
   const [tab, setTab] = useState<Tab>('inbox')
   const [modalOpen, setModalOpen] = useState(false)
@@ -73,6 +76,7 @@ export default function Home() {
               </div>
             )}
             <button onClick={() => openAdd()} className="text-sm font-bold px-3 py-1.5 rounded-xl text-white" style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)' }}>＋</button>
+            <Link href="/settings/family" title="הגדרות משפחה" className="text-sm px-2 py-1.5 rounded-xl text-gray-500 hover:text-white transition-all">⚙</Link>
             <button onClick={signOut} title="התנתק" className="text-sm px-2 py-1.5 rounded-xl text-gray-500 hover:text-white transition-all">⏏</button>
           </div>
         </div>
@@ -94,8 +98,8 @@ export default function Home() {
           <div className="text-center py-20 text-gray-600 text-sm animate-pulse">טוען מטלות...</div>
         ) : (
           <>
-            {tab === 'inbox' && <QuickInbox onAdd={addTask} />}
-            {tab === 'tasks' && <TaskBoard  tasks={tasks} onToggle={toggleDone} onEdit={openEdit} onDelete={deleteTask} onAdd={openAdd} />}
+            {tab === 'inbox' && <QuickInbox onAdd={addTask} familyId={familyId} members={members} />}
+            {tab === 'tasks' && <TaskBoard  tasks={tasks} members={members} onToggle={toggleDone} onEdit={openEdit} onDelete={deleteTask} onAdd={openAdd} />}
           </>
         )}
       </main>

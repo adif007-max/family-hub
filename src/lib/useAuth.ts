@@ -41,7 +41,17 @@ export function useAuth() {
     })
   }, [])
 
+  const signInWithGoogle = useCallback(async () => {
+    return supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+        queryParams: { prompt: 'select_account' },
+      },
+    })
+  }, [])
+
   const signOut = useCallback(() => supabase.auth.signOut(), [])
 
-  return { session, familyId, loading, signIn, signOut }
+  return { session, familyId, loading, signIn, signInWithGoogle, signOut }
 }

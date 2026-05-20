@@ -5,21 +5,15 @@ import { Task, Category } from '@/lib/types'
 import { useAuth } from '@/lib/useAuth'
 import { useTasks } from '@/lib/useTasks'
 import TaskModal from '@/components/TaskModal'
-import DailyDashboard from '@/components/DailyDashboard'
 import TaskBoard from '@/components/TaskBoard'
 import QuickInbox from '@/components/QuickInbox'
-import WeeklyReview from '@/components/WeeklyReview'
-import MiluimMode from '@/components/MiluimMode'
 import MagicLinkLogin from '@/components/MagicLinkLogin'
 
-type Tab = 'today' | 'tasks' | 'inbox' | 'weekly' | 'miluim'
+type Tab = 'inbox' | 'tasks'
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: 'today',   label: 'היום',    icon: '☀️' },
-  { id: 'tasks',   label: 'מטלות',   icon: '✅' },
-  { id: 'inbox',   label: 'Inbox',   icon: '📥' },
-  { id: 'weekly',  label: 'שבועי',   icon: '📊' },
-  { id: 'miluim',  label: 'מילואים', icon: '🪖' },
+  { id: 'inbox', label: 'Inbox',  icon: '📥' },
+  { id: 'tasks', label: 'מטלות', icon: '✅' },
 ]
 
 function Loader() {
@@ -34,7 +28,7 @@ export default function Home() {
   const { session, familyId, loading: authLoading, signOut } = useAuth()
   const { tasks, loading: tasksLoading, addTask, saveTask, toggleDone, deleteTask } = useTasks(familyId)
 
-  const [tab, setTab] = useState<Tab>('today')
+  const [tab, setTab] = useState<Tab>('inbox')
   const [modalOpen, setModalOpen] = useState(false)
   const [editTask, setEditTask] = useState<Task | null>(null)
   const [defaultCat, setDefaultCat] = useState<Category>('home')
@@ -58,8 +52,6 @@ export default function Home() {
   const onSave = (task: Task) => { saveTask(task); setModalOpen(false) }
 
   const urgentCount = tasks.filter(t => t.priority === 'urgent' && !t.done).length
-  const todayStr = new Date().toISOString().split('T')[0]
-  const todayCount = tasks.filter(t => t.due_date === todayStr && !t.done).length
 
   return (
     <div className="min-h-screen pb-24">
@@ -84,17 +76,14 @@ export default function Home() {
             <button onClick={signOut} title="התנתק" className="text-sm px-2 py-1.5 rounded-xl text-gray-500 hover:text-white transition-all">⏏</button>
           </div>
         </div>
-        <div className="flex overflow-x-auto px-4 pb-3 gap-2" style={{ scrollbarWidth: 'none' }}>
+        <div className="flex px-4 pb-3 gap-2">
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className="flex-shrink-0 flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-semibold transition-all"
+              className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold transition-all"
               style={tab === t.id
                 ? { background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.4)', color: '#c4b5fd' }
-                : { border: '1px solid transparent', color: '#6b7280' }}>
+                : { border: '1px solid rgba(255,255,255,0.05)', color: '#6b7280' }}>
               <span>{t.icon}</span><span>{t.label}</span>
-              {t.id === 'today' && todayCount > 0 && (
-                <span className="bg-orange-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">{todayCount}</span>
-              )}
             </button>
           ))}
         </div>
@@ -105,11 +94,8 @@ export default function Home() {
           <div className="text-center py-20 text-gray-600 text-sm animate-pulse">טוען מטלות...</div>
         ) : (
           <>
-            {tab === 'today'  && <DailyDashboard tasks={tasks} onToggle={toggleDone} onEdit={openEdit} onAdd={() => openAdd()} />}
-            {tab === 'tasks'  && <TaskBoard      tasks={tasks} onToggle={toggleDone} onEdit={openEdit} onDelete={deleteTask} onAdd={openAdd} onUpdate={() => {}} />}
-            {tab === 'inbox'  && <QuickInbox     onAdd={addTask} />}
-            {tab === 'weekly' && <WeeklyReview   tasks={tasks} />}
-            {tab === 'miluim' && <MiluimMode />}
+            {tab === 'inbox' && <QuickInbox onAdd={addTask} />}
+            {tab === 'tasks' && <TaskBoard  tasks={tasks} onToggle={toggleDone} onEdit={openEdit} onDelete={deleteTask} onAdd={openAdd} />}
           </>
         )}
       </main>

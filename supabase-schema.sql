@@ -11,7 +11,7 @@ create table if not exists allowed_emails (
 
 insert into allowed_emails (email, family_id) values
   ('adif007@gmail.com', 'fink'),
-  ('TAHEL_EMAIL_HERE',  'fink')
+  ('tehila1000@gmail.com', 'fink')
 on conflict (email) do nothing;
 
 -- 2. Profiles: maps an auth user to a family

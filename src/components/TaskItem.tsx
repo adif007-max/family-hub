@@ -52,14 +52,23 @@ interface Props {
 }
 
 export default function TaskItem({ task, members = [], onToggle, onEdit, onDelete, compact }: Props) {
-  const relatedMembers = task.related_member_ids
-    ? task.related_member_ids
-        .map(id => members.find(m => m.id === id))
-        .filter((m): m is FamilyMember => Boolean(m))
-    : []
   const due = dueDateInfo(task.due_date)
   const pri = PRIORITY_STYLES[task.priority]
   const asgn = ASSIGNEE[task.assignee]
+
+  // Resolve children chips: drop orphans (deleted members) and inactive (archived).
+  const relatedMembers = task.related_member_ids
+    ? task.related_member_ids
+        .map(id => members.find(m => m.id === id && m.is_active !== false))
+        .filter((m): m is FamilyMember => Boolean(m))
+    : []
+
+  // Hierarchical chip visibility — hide if the value is the default ("noise reduction").
+  const showPriorityChip = !task.done && task.priority !== 'normal' && task.priority !== 'low'
+  const showAssigneeAvatar = task.assignee !== 'both'
+  const showDueChip = Boolean(due) && !task.done
+  const showRecurChip = Boolean(task.recur)
+  const hasAnyChip = showPriorityChip || showDueChip || showRecurChip || relatedMembers.length > 0 || task.done
 
   return (
     <div
@@ -88,12 +97,12 @@ export default function TaskItem({ task, members = [], onToggle, onEdit, onDelet
         <div className={`text-sm font-medium leading-snug ${task.done ? 'line-through text-gray-500' : ''}`}>
           {task.text}
         </div>
-        {!compact && (
+        {!compact && hasAnyChip && (
           <div className="flex flex-wrap gap-1.5 items-center mt-1.5">
-            {!task.done && <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: pri.bg, color: pri.color }}>{pri.label}</span>}
+            {showPriorityChip && <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: pri.bg, color: pri.color }}>{pri.label}</span>}
             {task.done && <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(52,211,153,0.12)', color: '#34d399' }}>✓ הושלם</span>}
-            {due && !task.done && <span className="text-xs" style={{ color: due.cls }}>📅 {due.label}</span>}
-            {task.recur && <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)', color: '#60a5fa' }}>{RECUR[task.recur]}</span>}
+            {showDueChip && <span className="text-xs" style={{ color: due!.cls }}>📅 {due!.label}</span>}
+            {showRecurChip && <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)', color: '#60a5fa' }}>{RECUR[task.recur]}</span>}
             {relatedMembers.map(m => (
               <span key={m.id} className="text-xs px-1.5 py-0.5 rounded-full"
                 style={{ background: 'rgba(244,114,182,0.10)', border: '1px solid rgba(244,114,182,0.25)', color: '#f9a8d4' }}>
@@ -127,9 +136,11 @@ export default function TaskItem({ task, members = [], onToggle, onEdit, onDelet
               title="מחק">🗑</button>
           )}
         </div>
-        <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: asgn.bg }}>
-          {asgn.label}
-        </div>
+        {showAssigneeAvatar && (
+          <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: asgn.bg }}>
+            {asgn.label}
+          </div>
+        )}
       </div>
     </div>
   )

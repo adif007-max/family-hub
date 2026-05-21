@@ -65,17 +65,28 @@ related_member_ids — מערך של ה-id-ים של הילדים שמוזכרי
 ${items.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
 }
 
-export async function sortInbox(items: string[], familyId: string): Promise<SortedItem[]> {
+export async function sortInbox(items: string[], familyId: string, timeoutMs = 4000): Promise<SortedItem[]> {
   if (!items?.length) return []
 
   const members = await loadMembers(familyId)
   const prompt = buildPrompt(items, members)
 
-  const message = await client.messages.create({
-    model: 'claude-haiku-4-5',
-    max_tokens: 2048,
-    messages: [{ role: 'user', content: prompt }],
-  })
+  // Hard ceiling on the model call — caller falls back to regex if we throw.
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  let message
+  try {
+    message = await client.messages.create(
+      {
+        model: 'claude-haiku-4-5',
+        max_tokens: 2048,
+        messages: [{ role: 'user', content: prompt }],
+      },
+      { signal: controller.signal }
+    )
+  } finally {
+    clearTimeout(timer)
+  }
 
   const raw = (message.content[0] as { type: string; text: string }).text.trim()
   const cleaned = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()

@@ -58,6 +58,17 @@ cd C:/Users/adif0/family-hub && npx next build
 git add -A && git commit -m "..." && git push
 ```
 
+## Future work (intentionally deferred)
+Decided not to build in this round; revisit only if real usage demands them.
+
+- **Full PWA offline mode** — Service Worker + IndexedDB + sync queue + conflict resolution. ~6-10h. Defer until network reliability becomes a real pain point.
+- **Google Calendar dual-binding** — currently one-way (we create events). If drift becomes a problem in practice (Tahel moves an event but the task stays), build OAuth + webhook + reconciliation. Until then, app = source of truth, calendar = convenience view.
+- **Realtime payload-based cache updates** — replace `refetch()` with payload-driven `setTasks(prev => merge(prev, payload))`. Correct optimization in theory, irrelevant at 2-user scale.
+- **Snooze / postpone task** — "do tomorrow" / "next week".
+- **History view** — completed last week / month.
+- **Per-child dashboard** — currently children are a filter dimension; not a primary view.
+- **Multi-family support** — `family_id` is text 'fink' literal; refactor needed for multiple families.
+
 ## Environment variables (Vercel)
 Client-exposed:
 - `NEXT_PUBLIC_SUPABASE_URL`

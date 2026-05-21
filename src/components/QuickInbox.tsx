@@ -9,6 +9,7 @@ interface SortedItem {
   priority: 'urgent' | 'soon' | 'normal'
   assignee: Assignee
   related_member_ids: string[]
+  aiPending?: boolean
 }
 
 interface Props {
@@ -43,47 +44,54 @@ export default function QuickInbox({ onAdd, familyId, members }: Props) {
   }
 
   const smartSort = async () => {
+    if (!items.length) return
+
+    // Optimistic: show placeholders immediately so the UI never freezes.
+    const placeholders: SortedItem[] = items.map(text => ({
+      text,
+      cat: 'home',
+      priority: 'normal',
+      assignee: 'both',
+      related_member_ids: [],
+      aiPending: true,
+    }))
+    setProcessed(placeholders)
+    setStep('review')
     setLoading(true)
-    try {
-      const res = await fetch('/api/sort-inbox', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items, familyId }),
-      })
-      if (res.ok) {
-        const { result } = await res.json()
-        setProcessed(result)
-        setStep('review')
-      } else {
-        fallbackSort()
-      }
-    } catch {
-      fallbackSort()
-    } finally {
-      setLoading(false)
+
+    // Race AI call against a 4s timeout — beyond that, regex fallback is more useful than a frozen screen.
+    const timeout = new Promise<{ ok: false }>(resolve => setTimeout(() => resolve({ ok: false }), 4000))
+    const fetchAi = fetch('/api/sort-inbox', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items, familyId }),
+    }).then(async r => r.ok ? { ok: true as const, data: await r.json() } : { ok: false as const })
+      .catch(() => ({ ok: false as const }))
+
+    const winner = await Promise.race([fetchAi, timeout])
+    if (winner.ok && 'data' in winner) {
+      setProcessed((winner.data.result as SortedItem[]).map(x => ({ ...x, aiPending: false })))
+    } else {
+      // Regex fallback — replaces placeholders with locally-derived values.
+      setProcessed(items.map(fallbackItem))
     }
+    setLoading(false)
   }
 
-  const fallbackSort = () => {
-    const result: SortedItem[] = items.map(text => {
-      const lower = text.toLowerCase()
-      let cat: Category = 'home'
-      let priority: 'urgent' | 'soon' | 'normal' = 'normal'
-      if (/רופא|תור|מרשם|חיסון|ריפוי|אורתופד|ביטוח בריאות/.test(lower)) cat = 'medical'
-      else if (/לימוד|עבודה|בוחן|מבחן|קורס/.test(lower)) cat = 'studies'
-      else if (/חוג|שחיי|ציור|מוזיקה|ריקוד|טיפול/.test(lower)) cat = 'hobbies'
-      else if (/גן|בית ספר|אסיפה|קייטנה|מסגרת/.test(lower)) cat = 'formal'
-      else if (/כסף|לשלם|ביטוח לאומי|חשבון|תשלום|מס/.test(lower)) cat = 'finance'
-      else if (/מילואים|ציוד|צבא/.test(lower)) cat = 'miluim'
-      if (/דחוף|מיד|היום|חירום/.test(lower)) priority = 'urgent'
-      else if (/השבוע|בקרוב/.test(lower)) priority = 'soon'
-
-      // crude name detection for fallback only
-      const related = members.filter(m => text.includes(m.name)).map(m => m.id)
-      return { text, cat, priority, assignee: 'both', related_member_ids: related }
-    })
-    setProcessed(result)
-    setStep('review')
+  const fallbackItem = (text: string): SortedItem => {
+    const lower = text.toLowerCase()
+    let cat: Category = 'home'
+    let priority: 'urgent' | 'soon' | 'normal' = 'normal'
+    if (/רופא|תור|מרשם|חיסון|ריפוי|אורתופד|ביטוח בריאות/.test(lower)) cat = 'medical'
+    else if (/לימוד|עבודה|בוחן|מבחן|קורס/.test(lower)) cat = 'studies'
+    else if (/חוג|שחיי|ציור|מוזיקה|ריקוד|טיפול/.test(lower)) cat = 'hobbies'
+    else if (/גן|בית ספר|אסיפה|קייטנה|מסגרת/.test(lower)) cat = 'formal'
+    else if (/כסף|לשלם|ביטוח לאומי|חשבון|תשלום|מס/.test(lower)) cat = 'finance'
+    else if (/מילואים|ציוד|צבא/.test(lower)) cat = 'miluim'
+    if (/דחוף|מיד|היום|חירום/.test(lower)) priority = 'urgent'
+    else if (/השבוע|בקרוב/.test(lower)) priority = 'soon'
+    const related = members.filter(m => m.is_active && text.includes(m.name)).map(m => m.id)
+    return { text, cat, priority, assignee: 'both', related_member_ids: related, aiPending: false }
   }
 
   const confirmAll = () => {
@@ -130,7 +138,15 @@ export default function QuickInbox({ onAdd, familyId, members }: Props) {
         <div className="space-y-3">
           {processed.map((item, i) => (
             <div key={i} className="rounded-2xl p-4 space-y-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <div className="font-semibold text-sm">{item.text}</div>
+              <div className="flex justify-between items-center gap-2">
+                <div className="font-semibold text-sm flex-1">{item.text}</div>
+                {item.aiPending && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full animate-pulse"
+                    style={{ background: 'rgba(167,139,250,0.15)', color: '#c4b5fd' }}>
+                    ⏳ AI עובד...
+                  </span>
+                )}
+              </div>
 
               {/* Category + Priority + Assignee */}
               <div className="flex gap-2 flex-wrap">
@@ -177,9 +193,11 @@ export default function QuickInbox({ onAdd, familyId, members }: Props) {
         <div className="flex gap-3">
           <button onClick={() => setStep('input')} className="px-5 py-3 rounded-2xl text-sm font-semibold text-gray-400"
             style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>חזרה</button>
-          <button onClick={confirmAll} className="flex-1 py-3 rounded-2xl text-sm font-bold text-white"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)' }}>
-            ✅ שמור {processed.length} מטלות
+          <button onClick={confirmAll}
+            disabled={processed.some(p => p.aiPending)}
+            className="flex-1 py-3 rounded-2xl text-sm font-bold text-white transition-opacity"
+            style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', opacity: processed.some(p => p.aiPending) ? 0.5 : 1 }}>
+            {processed.some(p => p.aiPending) ? '⏳ ממתין לסיווג...' : `✅ שמור ${processed.length} מטלות`}
           </button>
         </div>
       </div>

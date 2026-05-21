@@ -110,7 +110,7 @@ export default function Home() {
         ＋ מטלה חדשה
       </button>
 
-      {modalOpen && <TaskModal task={editTask} defaultCategory={defaultCat} onSave={onSave} onClose={() => setModalOpen(false)} />}
+      {modalOpen && <TaskModal task={editTask} defaultCategory={defaultCat} members={members} onSave={onSave} onClose={() => setModalOpen(false)} />}
     </div>
   )
 }

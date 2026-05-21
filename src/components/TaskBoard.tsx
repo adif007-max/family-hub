@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Task, Category, CATEGORIES, FamilyMember } from '@/lib/types'
 import TaskItem from './TaskItem'
+import CalendarView from './CalendarView'
 
 interface Props {
   tasks: Task[]
@@ -28,6 +29,23 @@ export default function TaskBoard({ tasks, members, onToggle, onEdit, onDelete, 
   const [filterMember, setFilterMember] = useState<string>('all')
   const [hideDone, setHideDone] = useState(true)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list')
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const [currentMonth, setCurrentMonth] = useState<Date>(() => {
+    const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1)
+  })
+
+  const switchView = (mode: 'list' | 'calendar') => {
+    setViewMode(mode)
+    setSelectedDate(null)
+    if (mode === 'calendar') {
+      const d = new Date(); setCurrentMonth(new Date(d.getFullYear(), d.getMonth(), 1))
+    }
+  }
+
+  const selectedYmd = selectedDate
+    ? `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`
+    : null
 
   const todayStr = today()
   const weekEnd = plusDays(7)
@@ -37,6 +55,8 @@ export default function TaskBoard({ tasks, members, onToggle, onEdit, onDelete, 
     if (filterAssignee === 'adi' && t.assignee !== 'adi' && t.assignee !== 'both') return false
     if (filterAssignee === 'tahel' && t.assignee !== 'tahel' && t.assignee !== 'both') return false
     if (filterMember !== 'all' && !(t.related_member_ids || []).includes(filterMember)) return false
+
+    if (selectedYmd && t.due_date !== selectedYmd) return false
 
     if (filterTime === 'today' && t.due_date !== todayStr) return false
     if (filterTime === 'week') {
@@ -95,6 +115,35 @@ export default function TaskBoard({ tasks, members, onToggle, onEdit, onDelete, 
           ))}
         </div>
       </div>
+
+      {/* View toggle */}
+      <div className="flex gap-2">
+        <button onClick={() => switchView('list')}
+          className="flex-1 py-2 rounded-xl text-xs font-semibold transition-all"
+          style={viewMode === 'list'
+            ? { background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.4)', color: '#c4b5fd' }
+            : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', color: '#6b7280' }}>
+          📋 רשימה
+        </button>
+        <button onClick={() => switchView('calendar')}
+          className="flex-1 py-2 rounded-xl text-xs font-semibold transition-all"
+          style={viewMode === 'calendar'
+            ? { background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.4)', color: '#c4b5fd' }
+            : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', color: '#6b7280' }}>
+          📅 לוח שנה
+        </button>
+      </div>
+
+      {/* Calendar */}
+      {viewMode === 'calendar' && (
+        <CalendarView
+          tasks={tasks}
+          selectedDate={selectedDate}
+          onDateSelect={setSelectedDate}
+          currentMonth={currentMonth}
+          onMonthChange={setCurrentMonth}
+        />
+      )}
 
       {/* Search */}
       <input value={search} onChange={e => setSearch(e.target.value)}

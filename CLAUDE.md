@@ -17,8 +17,10 @@ Next.js 16 family task manager for עדי ותהלה (family `fink`).
 - `src/lib/sort-inbox.ts` — shared sort logic (Claude Haiku); used by web API + Telegram webhook
 - `src/app/page.tsx` — gates on auth, renders 2 tabs (Inbox primary, Tasks)
 - `src/components/QuickInbox.tsx` — calls `/api/sort-inbox`; review screen with category/priority/assignee/children edit
-- `src/components/TaskBoard.tsx` — children filter row + time filters + assignee + load balance
+- `src/components/TaskBoard.tsx` — view toggle (list/calendar) + filters + load balance
+- `src/components/CalendarView.tsx` — monthly Hebrew/Gregorian calendar with holidays (uses `@hebcal/core`)
 - `src/components/TaskItem.tsx` — chips: priority/due/recur/children + GCal button
+- `src/components/TaskModal.tsx` — edit ALL task fields (text/category/assignee/priority/due/recur/children/note)
 - `src/app/api/sort-inbox/route.ts` — receives { items, familyId }, calls `sortInbox()`
 - `src/app/api/telegram/webhook/route.ts` — Telegram bot; secret-token verified; commands + free-text sort
 - `src/app/settings/family/page.tsx` — edit/add/archive children

@@ -1,32 +1,42 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Task, Category, Priority, Assignee, Recur, CATEGORIES } from '@/lib/types'
+import { Task, Category, Priority, Assignee, Recur, CATEGORIES, FamilyMember } from '@/lib/types'
 
 interface Props {
   task: Task | null
   defaultCategory: Category
+  members: FamilyMember[]
   onSave: (task: Task) => void
   onClose: () => void
 }
 
-export default function TaskModal({ task, defaultCategory, onSave, onClose }: Props) {
+export default function TaskModal({ task, defaultCategory, members, onSave, onClose }: Props) {
   const [text, setText] = useState('')
   const [cat, setCat] = useState<Category>(defaultCategory)
-  const [assignee, setAssignee] = useState<Assignee>('adi')
+  const [assignee, setAssignee] = useState<Assignee>('both')
   const [priority, setPriority] = useState<Priority>('normal')
   const [due, setDue] = useState('')
   const [recur, setRecur] = useState<Recur>('')
   const [note, setNote] = useState('')
+  const [memberIds, setMemberIds] = useState<string[]>([])
 
   useEffect(() => {
     if (task) {
       setText(task.text); setCat(task.category); setAssignee(task.assignee)
       setPriority(task.priority); setDue(task.due_date || ''); setRecur(task.recur); setNote(task.note)
+      setMemberIds(task.related_member_ids || [])
     } else {
       setCat(defaultCategory)
+      setMemberIds([])
+      setAssignee('both')
     }
   }, [task, defaultCategory])
+
+  const toggleMember = (id: string) =>
+    setMemberIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+
+  const activeMembers = members.filter(m => m.is_active)
 
   const save = () => {
     if (!text.trim()) return
@@ -37,7 +47,7 @@ export default function TaskModal({ task, defaultCategory, onSave, onClose }: Pr
       due_date: due || null, recur, note: note.trim(),
       done: task?.done || false, done_at: task?.done_at || null,
       stuck_since: task?.stuck_since || null, family_id: 'fink',
-      related_member_ids: task?.related_member_ids || [],
+      related_member_ids: memberIds,
     }
     onSave(t)
   }
@@ -105,6 +115,28 @@ export default function TaskModal({ task, defaultCategory, onSave, onClose }: Pr
             ))}
           </div>
         </div>
+
+        {/* Children */}
+        {activeMembers.length > 0 && (
+          <div className="mb-4">
+            <label className="text-xs text-gray-400 mb-1.5 block">שייך לילדים</label>
+            <div className="flex flex-wrap gap-1.5">
+              {activeMembers.map(m => {
+                const active = memberIds.includes(m.id)
+                const emoji = m.gender === 'female' ? '👧' : '👦'
+                return (
+                  <button key={m.id} type="button" onClick={() => toggleMember(m.id)}
+                    className="px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
+                    style={active
+                      ? { background: 'rgba(244,114,182,0.15)', border: '1px solid rgba(244,114,182,0.45)', color: '#f9a8d4' }
+                      : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#9ca3af' }}>
+                    {emoji} {m.name}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Due + Recur */}
         <div className="grid grid-cols-2 gap-3 mb-4">

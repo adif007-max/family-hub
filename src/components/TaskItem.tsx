@@ -106,18 +106,26 @@ export default function TaskItem({ task, members = [], onToggle, onEdit, onDelet
       </div>
 
       {/* Right side */}
-      <div className="flex-shrink-0 flex items-center gap-2">
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+      <div className="flex-shrink-0 flex items-center gap-1.5">
+        <div className="flex gap-0.5">
           {task.due_date && !task.done && (
             <a href={gcalUrl(task)} target="_blank" rel="noopener noreferrer"
               onClick={e => e.stopPropagation()}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-xs hover:bg-white/10 text-gray-500 hover:text-blue-400 transition-all"
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-sm hover:bg-white/10 text-gray-400 hover:text-blue-400 transition-all"
               title="הוסף ליומן גוגל">📅</a>
           )}
           <button onClick={e => { e.stopPropagation(); onEdit(task) }}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-xs hover:bg-white/10 text-gray-500 hover:text-white transition-all">✏️</button>
-          {onDelete && <button onClick={e => { e.stopPropagation(); onDelete(task.id) }}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-xs hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-all">🗑</button>}
+            className="w-9 h-9 rounded-lg flex items-center justify-center text-sm hover:bg-white/10 text-gray-400 hover:text-white transition-all"
+            title="ערוך">✏️</button>
+          {onDelete && (
+            <button
+              onClick={e => {
+                e.stopPropagation()
+                if (confirm(`למחוק את המטלה "${task.text}"?`)) onDelete(task.id)
+              }}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-sm hover:bg-red-500/20 text-gray-400 hover:text-red-400 transition-all"
+              title="מחק">🗑</button>
+          )}
         </div>
         <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: asgn.bg }}>
           {asgn.label}

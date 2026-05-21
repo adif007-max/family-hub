@@ -116,7 +116,14 @@ export function useTasks(familyId: string | null) {
   }, [tasks])
 
   const deleteTask = useCallback(async (id: string) => {
-    await supabase.from('tasks').delete().eq('id', id)
+    const { error } = await supabase.from('tasks').delete().eq('id', id)
+    if (error) {
+      console.error('deleteTask failed', error)
+      if (typeof window !== 'undefined') alert(`מחיקה נכשלה: ${error.message}`)
+      return
+    }
+    // optimistic update so the row disappears even before realtime fires
+    setTasks(prev => prev.filter(t => t.id !== id))
   }, [])
 
   return { tasks, loading, addTask, saveTask, toggleDone, deleteTask }

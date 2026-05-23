@@ -153,9 +153,16 @@ export default function TaskBoard({ tasks, members, onToggle, onEdit, onDelete, 
       )}
 
       {/* Search */}
-      <input value={search} onChange={e => setSearch(e.target.value)}
-        className="w-full px-3 py-2 rounded-lg text-sm outline-none bg-transparent text-zinc-100 border border-zinc-700 focus:border-zinc-500 transition-colors"
-        placeholder="חיפוש מטלה…" />
+      <div className="relative">
+        <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="7"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input value={search} onChange={e => setSearch(e.target.value)}
+          className="w-full pr-9 pl-3 py-2 rounded-lg text-sm outline-none text-zinc-100 placeholder:text-zinc-600 transition-colors"
+          style={{ background: 'rgba(24,24,27,0.4)', border: '1px solid #27272a' }}
+          placeholder="חיפוש מטלה" />
+      </div>
 
       {/* Filters — combined chip row, only what's relevant */}
       {(timeChips.length > 0 || childrenWithTasks.length > 0 || filterTime !== 'all' || filterMember !== 'all') && (
@@ -163,7 +170,7 @@ export default function TaskBoard({ tasks, members, onToggle, onEdit, onDelete, 
           {(filterTime !== 'all' || filterMember !== 'all') && (
             <button onClick={() => { setFilterTime('all'); setFilterMember('all') }}
               className="px-2.5 py-1 rounded-full text-[11px] text-zinc-500 hover:text-zinc-100 transition-colors"
-              style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
+              style={{ border: '1px solid #27272a' }}>
               ✕ נקה
             </button>
           )}
@@ -173,10 +180,10 @@ export default function TaskBoard({ tasks, members, onToggle, onEdit, onDelete, 
               <button key={c.id} onClick={() => setFilterTime(active ? 'all' : c.id)}
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] transition-colors"
                 style={active
-                  ? { border: '1px solid rgba(167,139,250,0.4)', color: '#c4b5fd' }
-                  : { border: '1px solid rgba(255,255,255,0.06)', color: '#a1a1aa' }}>
+                  ? { background: '#27272a', border: '1px solid #3f3f46', color: '#f4f4f5' }
+                  : { background: 'transparent', border: '1px solid #27272a', color: '#a1a1aa' }}>
                 <span>{c.label}</span>
-                <span style={{ color: c.tone || '#71717a' }}>{c.count}</span>
+                <span style={{ color: active ? (c.tone || '#a1a1aa') : '#71717a' }}>{c.count}</span>
               </button>
             )
           })}
@@ -187,8 +194,8 @@ export default function TaskBoard({ tasks, members, onToggle, onEdit, onDelete, 
               <button key={m.id} onClick={() => setFilterMember(active ? 'all' : m.id)}
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] transition-colors"
                 style={active
-                  ? { border: '1px solid rgba(244,114,182,0.4)', color: '#f9a8d4' }
-                  : { border: '1px solid rgba(255,255,255,0.06)', color: '#a1a1aa' }}>
+                  ? { background: '#27272a', border: '1px solid #3f3f46', color: '#f4f4f5' }
+                  : { background: 'transparent', border: '1px solid #27272a', color: '#a1a1aa' }}>
                 <span>{m.gender === 'female' ? '👧' : '👦'} {m.name}</span>
                 <span className="text-zinc-500">{count}</span>
               </button>
@@ -214,8 +221,20 @@ export default function TaskBoard({ tasks, members, onToggle, onEdit, onDelete, 
         })}
         <div className="flex-1" />
         <button onClick={() => setHideDone(!hideDone)}
-          className="px-2.5 py-1 text-[11px] transition-colors"
-          style={{ color: hideDone ? '#71717a' : '#a1a1aa' }}>
+          className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] transition-colors text-zinc-500 hover:text-zinc-300">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: hideDone ? 0.5 : 1 }}>
+            {hideDone ? (
+              <>
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </>
+            ) : (
+              <>
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </>
+            )}
+          </svg>
           {hideDone ? 'הראה הושלמו' : 'הסתר הושלמו'}
         </button>
       </div>

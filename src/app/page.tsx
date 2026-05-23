@@ -133,9 +133,10 @@ export default function Home() {
       </main>
 
       <button onClick={() => openAdd()}
-        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 text-sm text-zinc-100 px-5 py-2.5 rounded-full transition-colors"
-        style={{ background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.5)', backdropFilter: 'blur(10px)' }}>
-        ＋ מטלה חדשה
+        className="fixed bottom-5 left-5 z-40 w-12 h-12 rounded-full flex items-center justify-center text-zinc-300 hover:text-zinc-100 transition-colors"
+        style={{ background: '#18181b', border: '1px solid #3f3f46' }}
+        title="מטלה חדשה">
+        <span className="text-xl leading-none">＋</span>
       </button>
 
       {modalOpen && <TaskModal task={editTask} defaultCategory={defaultCat} members={members} onSave={onSave} onClose={() => setModalOpen(false)} />}

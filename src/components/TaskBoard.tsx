@@ -81,56 +81,63 @@ export default function TaskBoard({ tasks, members, onToggle, onEdit, onDelete, 
   const urgentCount  = pending.filter(t => t.priority === 'urgent').length
   const todayCount   = pending.filter(t => t.due_date === todayStr).length
   const overdueCount = pending.filter(t => t.due_date && t.due_date < todayStr).length
+  const weekCount    = pending.filter(t => t.due_date && t.due_date >= todayStr && t.due_date <= weekEnd).length
   const adiLoad      = pending.filter(t => t.assignee === 'adi'   || t.assignee === 'both').length
   const tahelLoad    = pending.filter(t => t.assignee === 'tahel' || t.assignee === 'both').length
-  const maxLoad      = Math.max(adiLoad, tahelLoad, 1)
 
-  const timeChips: { id: TimeFilter; label: string; count?: number; color?: string }[] = [
-    { id: 'all',     label: 'הכל' },
-    { id: 'today',   label: '⏰ היום',     count: todayCount,   color: '#fb923c' },
-    { id: 'week',    label: '📅 השבוע' },
-    { id: 'overdue', label: '⚠ באיחור',    count: overdueCount, color: '#f87171' },
-    { id: 'urgent',  label: '🔥 דחוף',     count: urgentCount,  color: '#f87171' },
-  ]
+  // Only show time chips that have content (plus 'all' always)
+  const timeChips: { id: TimeFilter; label: string; count: number; tone?: string }[] = (
+    [
+      { id: 'today',   label: '⏰ היום',     count: todayCount,   tone: '#fb923c' },
+      { id: 'week',    label: '📅 השבוע',    count: weekCount },
+      { id: 'overdue', label: '⚠ באיחור',    count: overdueCount, tone: '#f87171' },
+      { id: 'urgent',  label: '🔥 דחוף',     count: urgentCount,  tone: '#f87171' },
+    ] as { id: TimeFilter; label: string; count: number; tone?: string }[]
+  ).filter(c => c.count > 0)
+
+  // Children chips — show only those with at least one task
+  const childrenWithTasks = members.filter(m =>
+    m.is_active && pending.some(t => (t.related_member_ids || []).includes(m.id))
+  )
 
   return (
-    <div className="animate-fade-in space-y-4">
-      {/* Compact stats */}
-      <div className="rounded-2xl p-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
-        <div className="flex justify-between items-center mb-3">
-          <div className="text-xs text-gray-400 font-semibold">⚖️ עומס</div>
-          <div className="text-xs text-gray-500">{pending.length} ממתינות</div>
-        </div>
-        <div className="space-y-2">
-          {[['עדי', adiLoad, '#7c3aed'], ['תהלה', tahelLoad, '#0891b2']].map(([name, count, color]) => (
-            <div key={String(name)}>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="font-medium">{name}</span>
-                <span className="text-gray-400">{count}</span>
-              </div>
-              <div className="h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.07)' }}>
-                <div className="h-full rounded-full transition-all" style={{ width: `${(Number(count) / maxLoad) * 100}%`, background: String(color) }} />
-              </div>
-            </div>
-          ))}
-        </div>
+    <div className="animate-fade-in space-y-5">
+      {/* Load balance — single line, no card */}
+      <div className="flex items-center gap-3 text-xs text-zinc-500">
+        <span className="uppercase tracking-widest text-[10px]">עומס</span>
+        <span className="text-zinc-600">·</span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#a78bfa' }} />
+          <span className="text-zinc-300">עדי</span>
+          <span className="text-zinc-500">{adiLoad}</span>
+        </span>
+        <span className="text-zinc-600">·</span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#22d3ee' }} />
+          <span className="text-zinc-300">תהלה</span>
+          <span className="text-zinc-500">{tahelLoad}</span>
+        </span>
       </div>
 
-      {/* View toggle */}
-      <div className="flex gap-2">
+      {/* View toggle — text, underline-style */}
+      <div className="flex gap-5 text-sm pb-1" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
         <button onClick={() => switchView('list')}
-          className="flex-1 py-2 rounded-xl text-xs font-semibold transition-all"
-          style={viewMode === 'list'
-            ? { background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.4)', color: '#c4b5fd' }
-            : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', color: '#6b7280' }}>
-          📋 רשימה
+          style={{
+            color: viewMode === 'list' ? '#e4e4e7' : '#71717a',
+            borderBottom: viewMode === 'list' ? '2px solid #e4e4e7' : '2px solid transparent',
+            paddingBottom: '4px',
+            marginBottom: '-1px',
+          }}>
+          רשימה
         </button>
         <button onClick={() => switchView('calendar')}
-          className="flex-1 py-2 rounded-xl text-xs font-semibold transition-all"
-          style={viewMode === 'calendar'
-            ? { background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.4)', color: '#c4b5fd' }
-            : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', color: '#6b7280' }}>
-          📅 לוח שנה
+          style={{
+            color: viewMode === 'calendar' ? '#e4e4e7' : '#71717a',
+            borderBottom: viewMode === 'calendar' ? '2px solid #e4e4e7' : '2px solid transparent',
+            paddingBottom: '4px',
+            marginBottom: '-1px',
+          }}>
+          לוח שנה
         </button>
       </div>
 
@@ -147,111 +154,101 @@ export default function TaskBoard({ tasks, members, onToggle, onEdit, onDelete, 
 
       {/* Search */}
       <input value={search} onChange={e => setSearch(e.target.value)}
-        className="w-full px-4 py-2.5 rounded-xl text-sm outline-none text-white"
-        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.09)' }}
-        placeholder="🔍 חיפוש מטלה..." />
+        className="w-full px-3 py-2 rounded-lg text-sm outline-none bg-transparent text-zinc-100 border border-zinc-700 focus:border-zinc-500 transition-colors"
+        placeholder="חיפוש מטלה…" />
 
-      {/* Children filter */}
-      {members.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-          <button onClick={() => setFilterMember('all')}
-            className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
-            style={filterMember === 'all'
-              ? { background: 'rgba(244,114,182,0.12)', border: '1px solid rgba(244,114,182,0.35)', color: '#f9a8d4' }
-              : { border: '1px solid rgba(255,255,255,0.08)', color: '#6b7280' }}>
-            👨‍👩‍👧‍👦 כולם
-          </button>
-          {members.map(m => (
-            <button key={m.id} onClick={() => setFilterMember(m.id)}
-              className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
-              style={filterMember === m.id
-                ? { background: 'rgba(244,114,182,0.15)', border: '1px solid rgba(244,114,182,0.45)', color: '#f9a8d4' }
-                : { border: '1px solid rgba(255,255,255,0.08)', color: '#6b7280' }}>
-              {m.gender === 'female' ? '👧' : '👦'} {m.name}
+      {/* Filters — combined chip row, only what's relevant */}
+      {(timeChips.length > 0 || childrenWithTasks.length > 0 || filterTime !== 'all' || filterMember !== 'all') && (
+        <div className="flex flex-wrap gap-1.5">
+          {(filterTime !== 'all' || filterMember !== 'all') && (
+            <button onClick={() => { setFilterTime('all'); setFilterMember('all') }}
+              className="px-2.5 py-1 rounded-full text-[11px] text-zinc-500 hover:text-zinc-100 transition-colors"
+              style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
+              ✕ נקה
             </button>
-          ))}
+          )}
+          {timeChips.map(c => {
+            const active = filterTime === c.id
+            return (
+              <button key={c.id} onClick={() => setFilterTime(active ? 'all' : c.id)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] transition-colors"
+                style={active
+                  ? { border: '1px solid rgba(167,139,250,0.4)', color: '#c4b5fd' }
+                  : { border: '1px solid rgba(255,255,255,0.06)', color: '#a1a1aa' }}>
+                <span>{c.label}</span>
+                <span style={{ color: c.tone || '#71717a' }}>{c.count}</span>
+              </button>
+            )
+          })}
+          {childrenWithTasks.map(m => {
+            const active = filterMember === m.id
+            const count = pending.filter(t => (t.related_member_ids || []).includes(m.id)).length
+            return (
+              <button key={m.id} onClick={() => setFilterMember(active ? 'all' : m.id)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] transition-colors"
+                style={active
+                  ? { border: '1px solid rgba(244,114,182,0.4)', color: '#f9a8d4' }
+                  : { border: '1px solid rgba(255,255,255,0.06)', color: '#a1a1aa' }}>
+                <span>{m.gender === 'female' ? '👧' : '👦'} {m.name}</span>
+                <span className="text-zinc-500">{count}</span>
+              </button>
+            )
+          })}
         </div>
       )}
 
-      {/* Time filters */}
-      <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-        {timeChips.map(c => (
-          <button key={c.id} onClick={() => setFilterTime(c.id)}
-            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
-            style={filterTime === c.id
-              ? { background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.4)', color: '#c4b5fd' }
-              : { border: '1px solid rgba(255,255,255,0.08)', color: '#6b7280' }}>
-            <span>{c.label}</span>
-            {c.count && c.count > 0 && (
-              <span className="text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center" style={{ background: c.color, color: '#000' }}>{c.count}</span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Assignee + hide done */}
-      <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-        {[['all','הכל'],['adi','עדי'],['tahel','תהלה']].map(([val, lbl]) => (
-          <button key={val} onClick={() => setFilterAssignee(val)}
-            className="flex-shrink-0 px-3 py-1 rounded-full text-xs transition-all"
-            style={filterAssignee === val
-              ? { background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: '#e5e7eb' }
-              : { border: '1px solid rgba(255,255,255,0.05)', color: '#6b7280' }}>
-            {lbl}
-          </button>
-        ))}
+      {/* Assignee row — only if there are tasks for adi vs tahel split */}
+      <div className="flex gap-1.5 text-[11px]">
+        {[['all','הכל'],['adi','עדי'],['tahel','תהלה']].map(([val, lbl]) => {
+          const active = filterAssignee === val
+          return (
+            <button key={val} onClick={() => setFilterAssignee(val)}
+              className="px-2.5 py-1 transition-colors"
+              style={{
+                color: active ? '#e4e4e7' : '#71717a',
+                borderBottom: active ? '1px solid #e4e4e7' : '1px solid transparent',
+              }}>
+              {lbl}
+            </button>
+          )
+        })}
+        <div className="flex-1" />
         <button onClick={() => setHideDone(!hideDone)}
-          className="flex-shrink-0 px-3 py-1 rounded-full text-xs transition-all"
-          style={hideDone
-            ? { background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.3)', color: '#34d399' }
-            : { border: '1px solid rgba(255,255,255,0.05)', color: '#6b7280' }}>
-          {hideDone ? '👁 הראה הושלמו' : 'הסתר הושלמו'}
+          className="px-2.5 py-1 text-[11px] transition-colors"
+          style={{ color: hideDone ? '#71717a' : '#a1a1aa' }}>
+          {hideDone ? 'הראה הושלמו' : 'הסתר הושלמו'}
         </button>
       </div>
 
       {/* Empty state */}
       {filtered.length === 0 && (
-        <div className="text-center py-16 text-gray-600">
-          <div className="text-4xl mb-3">🎉</div>
-          <div className="text-sm">אין מטלות לפי הסינון הזה</div>
+        <div className="text-center py-16 text-zinc-600 text-sm">
+          אין מטלות לפי הסינון
         </div>
       )}
 
-      {/* Categories */}
+      {/* Categories — quiet */}
       {filtered.length > 0 && CATEGORIES.map(cat => {
         const catTasks = filtered.filter(t => t.category === cat.id)
         if (catTasks.length === 0) return null
-        const allCat = tasks.filter(t => t.category === cat.id)
-        const doneCount = allCat.filter(t => t.done).length
-        const pct = allCat.length ? Math.round(doneCount / allCat.length * 100) : 0
         const isCollapsed = collapsed[cat.id]
 
         return (
-          <div key={cat.id} className="rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
-            <button className="w-full px-4 pt-4 pb-2 flex items-center justify-between" onClick={() => setCollapsed(p => ({ ...p, [cat.id]: !p[cat.id] }))}>
-              <div className="flex items-center gap-3">
-                <span className="text-xl">{cat.icon}</span>
-                <div className="text-right">
-                  <div className="font-bold text-sm">{cat.name}</div>
-                  <div className="text-xs text-gray-500">{doneCount}/{allCat.length} הושלמו</div>
-                </div>
+          <div key={cat.id}>
+            <button className="w-full flex items-baseline justify-between pb-2 mb-1" onClick={() => setCollapsed(p => ({ ...p, [cat.id]: !p[cat.id] }))}>
+              <div className="flex items-baseline gap-2">
+                <span className="text-[10px] uppercase tracking-widest text-zinc-500">{cat.name.split('—')[0].trim()}</span>
+                <span className="text-[10px] text-zinc-600">·</span>
+                <span className="text-[10px] text-zinc-500">{catTasks.length}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs px-2 py-0.5 rounded-full text-gray-400" style={{ background: 'rgba(255,255,255,0.07)' }}>{catTasks.length}</span>
-                <span className="text-gray-500 text-sm transition-transform" style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }}>▾</span>
-              </div>
+              <span className="text-zinc-600 text-xs" style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>▾</span>
             </button>
 
-            <div className="mx-4 mb-3 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }}>
-              <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #7c3aed, #a78bfa)' }} />
-            </div>
-
             {!isCollapsed && (
-              <div className="px-4 pb-4 space-y-2">
+              <div>
                 {catTasks.map(t => <TaskItem key={t.id} task={t} members={members} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} />)}
                 <button onClick={() => onAdd(cat.id)}
-                  className="w-full py-2 rounded-xl text-xs text-gray-600 transition-all hover:text-purple-400"
-                  style={{ border: '1px dashed rgba(255,255,255,0.1)' }}>
+                  className="w-full py-2 text-[11px] text-zinc-600 hover:text-zinc-300 transition-colors text-right">
                   ＋ הוסף מטלה
                 </button>
               </div>

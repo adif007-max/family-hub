@@ -48,6 +48,8 @@ export default function TaskModal({ task, defaultCategory, members, onSave, onCl
       done: task?.done || false, done_at: task?.done_at || null,
       stuck_since: task?.stuck_since || null, family_id: 'fink',
       related_member_ids: memberIds,
+      source_fact_id: task?.source_fact_id ?? null,
+      source_fact_table: task?.source_fact_table ?? null,
     }
     onSave(t)
   }

@@ -18,6 +18,48 @@ export interface Task {
   stuck_since: string | null
   family_id: string
   related_member_ids: string[]
+  source_fact_id: string | null
+  source_fact_table: 'vehicles' | 'subscriptions' | null
+}
+
+export interface Vehicle {
+  id: string
+  family_id: string
+  make: string
+  model: string | null
+  year: number | null
+  license_plate: string | null
+  test_expiry_date: string | null
+  insurance_renewal_date: string | null
+  insurance_policy_number: string | null
+  notes: string | null
+}
+
+export interface Subscription {
+  id: string
+  family_id: string
+  name: string
+  monthly_cost: number | null
+  currency: string
+  renewal_date: string | null
+  account_email: string | null
+  notes: string | null
+}
+
+export type ScheduleActivityType = 'school' | 'kindergarten' | 'class' | 'meeting'
+
+export interface Schedule {
+  id: string
+  family_id: string
+  child_id: string | null
+  activity_type: ScheduleActivityType | null
+  activity_name: string
+  days_of_week: string[]
+  start_time: string | null
+  end_time: string | null
+  location: string | null
+  contact_phone: string | null
+  notes: string | null
 }
 
 export interface FamilyMember {

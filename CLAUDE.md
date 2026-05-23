@@ -17,10 +17,25 @@ Next.js 16 family task manager for עדי ותהלה (family `fink`).
 - `src/lib/sort-inbox.ts` — shared sort logic (Claude Haiku); used by web API + Telegram webhook
 - `src/app/page.tsx` — gates on auth, renders 2 tabs (Inbox primary, Tasks)
 - `src/components/QuickInbox.tsx` — calls `/api/sort-inbox`; review screen with category/priority/assignee/children edit
-- `src/components/TaskBoard.tsx` — view toggle (list/calendar) + filters + load balance
+- `src/components/TaskBoard.tsx` — view toggle (list/calendar) + filters + load balance (single line)
 - `src/components/CalendarView.tsx` — monthly Hebrew/Gregorian calendar with holidays (uses `@hebcal/core`)
-- `src/components/TaskItem.tsx` — chips: priority/due/recur/children + GCal button
+- `src/components/TaskItem.tsx` — chips: priority/due/recur/children + GCal button; no per-card background, just dividers
 - `src/components/TaskModal.tsx` — edit ALL task fields (text/category/assignee/priority/due/recur/children/note)
+- `src/components/InfoTab.tsx` — Info dashboard (vehicles + subscriptions + schedules)
+- `src/components/FactModal.tsx` — generic editor for vehicles/subscriptions/schedules
+- `src/lib/useFacts.ts` — `useVehicles`, `useSubscriptions`, `useSchedules` hooks (realtime CRUD)
+- `src/lib/ensureReminders.ts` — idempotent reminder seeding (runs once per page load; checks expiring dates < 30 days, creates linked tasks)
+
+## Design language (post-round-N polish)
+- Background: `#0a0a0f` (near-black, was `#0f0f1a`)
+- Borders over fills: `border` everywhere instead of `bg-zinc-800`
+- Typography hierarchy: section labels `text-[10px] uppercase tracking-widest text-zinc-500`; titles `text-base font-normal text-zinc-100`; meta `text-xs text-zinc-400`
+- No `font-bold`; only `font-normal` (default) and occasional `font-medium`
+- Tabs: text + underline only (no chip backgrounds)
+- Load balance: single horizontal line of dots + counts (no card, no bars)
+- Filter chips: only render when count > 0
+- Task items: no per-card background, divider lines only; urgent shows a thin red rail on the right edge
+- Modals: dark `#0a0a0f` + subtle border + `rounded-xl` + simple ✕ close in corner
 - `src/app/api/sort-inbox/route.ts` — receives { items, familyId }, calls `sortInbox()`
 - `src/app/api/telegram/webhook/route.ts` — Telegram bot; secret-token verified; commands + free-text sort
 - `src/app/settings/family/page.tsx` — edit/add/archive children

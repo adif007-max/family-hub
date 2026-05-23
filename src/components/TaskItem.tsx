@@ -73,15 +73,14 @@ export default function TaskItem({ task, members = [], onToggle, onEdit, onDelet
   return (
     <div
       onClick={() => onToggle(task.id)}
-      className="group flex items-start gap-3 p-3 rounded-2xl cursor-pointer transition-all relative overflow-hidden"
+      className="group flex items-start gap-3 py-3 px-1 cursor-pointer transition-colors relative hover:bg-white/[0.02]"
       style={{
-        background: 'rgba(255,255,255,0.04)',
-        border: `1px solid ${task.priority === 'urgent' && !task.done ? 'rgba(248,113,113,0.3)' : 'rgba(255,255,255,0.07)'}`,
+        borderBottom: '1px solid rgba(255,255,255,0.05)',
         opacity: task.done ? 0.5 : 1,
       }}
     >
       {task.priority === 'urgent' && !task.done && (
-        <div className="absolute right-0 top-0 bottom-0 w-0.5" style={{ background: '#f87171' }} />
+        <div className="absolute right-0 top-2 bottom-2 w-0.5 rounded-full" style={{ background: '#f87171' }} />
       )}
 
       {/* Checkbox */}

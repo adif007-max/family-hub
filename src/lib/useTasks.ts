@@ -4,10 +4,12 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Task } from './types'
 import { supabase } from './supabase'
 
-type Row = Omit<Task, 'recur' | 'note' | 'related_member_ids'> & {
+type Row = Omit<Task, 'recur' | 'note' | 'related_member_ids' | 'source_fact_id' | 'source_fact_table'> & {
   recur: string | null
   note: string | null
   related_member_ids: string[] | null
+  source_fact_id: string | null
+  source_fact_table: string | null
 }
 
 function rowToTask(r: Row): Task {
@@ -17,6 +19,8 @@ function rowToTask(r: Row): Task {
     recur: (r.recur || '') as Task['recur'],
     note: r.note || '',
     related_member_ids: r.related_member_ids || [],
+    source_fact_id: r.source_fact_id || null,
+    source_fact_table: (r.source_fact_table as Task['source_fact_table']) || null,
   }
 }
 
@@ -35,6 +39,8 @@ function taskToInsert(t: Partial<Task>, familyId: string) {
     done_at: t.done_at ?? null,
     stuck_since: t.stuck_since ?? null,
     related_member_ids: t.related_member_ids ?? [],
+    source_fact_id: t.source_fact_id ?? null,
+    source_fact_table: t.source_fact_table ?? null,
   }
 }
 

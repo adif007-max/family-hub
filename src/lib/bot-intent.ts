@@ -28,15 +28,17 @@ interface Ctx {
   vehicles: unknown[]
   subscriptions: unknown[]
   schedules: unknown[]
+  lessons: unknown[]
   members: unknown[]
   tasks: unknown[]
 }
 
 async function loadContext(familyId: string): Promise<Ctx> {
-  const [v, s, sc, m, t] = await Promise.all([
+  const [v, s, sc, les, m, t] = await Promise.all([
     supabaseAdmin.from('vehicles').select('*').eq('family_id', familyId),
     supabaseAdmin.from('subscriptions').select('*').eq('family_id', familyId),
     supabaseAdmin.from('schedules').select('*').eq('family_id', familyId),
+    supabaseAdmin.from('lessons').select('*').eq('family_id', familyId).order('day_of_week').order('start_time'),
     supabaseAdmin.from('family_members').select('*').eq('family_id', familyId).eq('is_active', true),
     supabaseAdmin.from('tasks')
       .select('id,text,category,priority,due_date,assignee,done,related_member_ids')
@@ -46,6 +48,7 @@ async function loadContext(familyId: string): Promise<Ctx> {
     vehicles: v.data || [],
     subscriptions: s.data || [],
     schedules: sc.data || [],
+    lessons: les.data || [],
     members: m.data || [],
     tasks: t.data || [],
   }
@@ -53,9 +56,22 @@ async function loadContext(familyId: string): Promise<Ctx> {
 
 function buildPrompt(text: string, ctx: Ctx): string {
   const today = new Date().toISOString().split('T')[0]
+  // Compute day-of-week string for today and tomorrow (for lessons lookup)
+  const todayDate = new Date()
+  const tomorrowDate = new Date(todayDate); tomorrowDate.setDate(tomorrowDate.getDate() + 1)
+  const dayNames = ['sun','mon','tue','wed','thu','fri','sat']
+  const todayDow = dayNames[todayDate.getDay()]
+  const tomorrowDow = dayNames[tomorrowDate.getDay()]
+  const hebrewDayName = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת']
+  const todayHeb = hebrewDayName[todayDate.getDay()]
+  const tomorrowHeb = hebrewDayName[tomorrowDate.getDay()]
+
   return `אתה עוזר משפחתי לבוט טלגרם של משפחת פינקלשטיין. ענה תמיד בעברית.
 
-תאריך היום: ${today}
+תאריך היום: ${today} (יום ${todayHeb}, day_of_week="${todayDow}")
+מחר: יום ${tomorrowHeb} (day_of_week="${tomorrowDow}")
+
+המרת ימי שבוע: ראשון=sun, שני=mon, שלישי=tue, רביעי=wed, חמישי=thu, שישי=fri
 
 נתוני המשפחה:
 
@@ -65,8 +81,11 @@ ${JSON.stringify(ctx.vehicles, null, 1)}
 מנויים:
 ${JSON.stringify(ctx.subscriptions, null, 1)}
 
-לו"ז:
+לו"ז (חוגים ופעילויות):
 ${JSON.stringify(ctx.schedules, null, 1)}
+
+מערכת שעות (שיעורי בית ספר — כל שיעור שורה נפרדת, day_of_week=sun/mon/tue/wed/thu/fri):
+${JSON.stringify(ctx.lessons, null, 1)}
 
 ילדים (active):
 ${JSON.stringify(ctx.members, null, 1)}
@@ -95,6 +114,17 @@ ${JSON.stringify(ctx.tasks, null, 1)}
 
 כללים:
 1. read (שאלה): שלוף מהנתונים, פרמט יפה ב-reply. action=null, create_task=false.
+   שאלות לוח שעות ("מה יש להלל היום?", "מה יש להלל מחר?", "מה יש לרחל ביום חמישי?", "מתי הלל מסיים?"):
+   - זהה את הילד לפי שם (חפש ב-members)
+   - זהה את היום: "היום"→todayDow, "מחר"→tomorrowDow, "ביום ראשון/שני/..."→sun/mon/...
+   - סנן את lessons לפי child_id + day_of_week, מיין לפי start_time
+   - reply לשאלה מלאה:
+     📚 <b>שם · יום X · בית ספר</b>
+     HH:MM–HH:MM · מקצוע (מורה)
+     ...
+     סיום ב-HH:MM
+   - reply ל"מתי מסיים?" — רק: "הלל מסיים היום ב-HH:MM"
+   - אם אין שיעורים ביום זה: "אין שיעורים להלל ביום X"
 2. create + מטלה: create_task=true, action=null. ה-reply יהיה "✅ מוסיף..." קצר — pipeline חיצוני יטפל בסיווג. module="tasks".
 3. create + רכב/מנוי/לו"ז: action.op="insert", table=המודול הנכון. כתוב fields ישירות (אל תכלול family_id, השרת מוסיף). reply = "✅ נוסף..." עם פרטים. needs_confirmation=false (יצירה לא דורשת אישור).
    מנוי חודשי: הכנס billing_type="monthly" ו-billing_day_of_month=<מספר יום>, ואל תכניס renewal_date.
@@ -102,13 +132,23 @@ ${JSON.stringify(ctx.tasks, null, 1)}
 4. update: action.op="update", row_id=ה-id מהנתונים שהוצגו לך. fields=רק השדות שמשתנים. needs_confirmation=true אם השינוי משמעותי (תאריך, מחיר, מספר טלפון, סטטוס פוליסה). reply במקרה הזה יציג "האם לעדכן?\n<old> → <new>\nשלח 'כן' לאישור." (שורה נפרדת לכל חלק). needs_confirmation=false רק לתיקוני הקלדה קטנים או notes.
 5. שאלה מעורפלת (2+ רשומות אפשריות): intent="read", action=null, reply=מציג רשימה ושואל "איזה?".
 6. רשומה לא קיימת ("מתי הטסט?" ואין רכבים): intent="read", reply="אין רכבים במאגר. הוסף דרך לשונית 'מידע' באתר."
-7. לא הבנתי: intent="unknown", reply=הצעות (דוגמאות: "מתי הטסט?", "כמה אני משלם על מנויים?", "תוסיף תור שיניים").
+7. לא הבנתי: intent="unknown", reply=הצעות (דוגמאות: "מתי הטסט?", "כמה אני משלם על מנויים?", "תוסיף תור שיניים", "מה יש להלל היום?").
 
 פורמט תאריכים בעברית: DD/MM/YYYY. ימים: א, ב, ג, ד, ה, ו, ש. שמות חודשים בעברית כשמתאים.
 חישוב "בעוד X ימים" בקפדנות מ-${today}.
 לסיכומי כספים — כלול גם שנתי (מחודש × 12).
 
 דוגמאות פורמט reply (העתק את המבנה, החלף ערכים):
+
+📚 <b>הלל · יום שני · ת"ת נווה</b>
+08:00–10:00 · תורה (הרב נדב)
+10:20–11:50 · עברית (הרב נדב)
+12:05–13:30 · תורה (הרב נדב)
+
+סיום ב-13:30
+
+הלל מסיים היום ב-13:30
+
 
 🚗 <b>סקודה קודיאק 2019</b>
 טסט: 05/07/2026 (בעוד 41 ימים)

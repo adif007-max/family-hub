@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Vehicle, Subscription, Schedule, FamilyMember, ScheduleActivityType } from '@/lib/types'
-import { useVehicles, useSubscriptions, useSchedules } from '@/lib/useFacts'
+import { Vehicle, Subscription, Schedule, Lesson, FamilyMember, ScheduleActivityType } from '@/lib/types'
+import { useVehicles, useSubscriptions, useSchedules, useLessons } from '@/lib/useFacts'
 import FactModal from './FactModal'
 
 interface Props {
@@ -47,6 +47,7 @@ export default function InfoTab({ familyId, members }: Props) {
   const { items: vehicles,      add: addV, update: updV, remove: rmV } = useVehicles(familyId)
   const { items: subscriptions, add: addS, update: updS, remove: rmS } = useSubscriptions(familyId)
   const { items: schedules,     add: addSch, update: updSch, remove: rmSch } = useSchedules(familyId)
+  const { items: lessons } = useLessons(familyId)
 
   const [editing, setEditing] = useState<
     | { kind: 'vehicle'; item: Vehicle | null }
@@ -187,6 +188,56 @@ export default function InfoTab({ familyId, members }: Props) {
           ))}
         </div>
       </section>
+
+      {/* Lessons (school timetable per child) */}
+      {lessons.length > 0 && (() => {
+        const DAY_LABEL: Record<string, string> = { sun: 'א\'', mon: 'ב\'', tue: 'ג\'', wed: 'ד\'', thu: 'ה\'', fri: 'ו\'', sat: 'ש\'' }
+        const DAY_ORDER: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 }
+        const lessonsByChild = members.reduce<{ member: FamilyMember; lessons: Lesson[] }[]>((acc, m) => {
+          const own = lessons.filter(l => l.child_id === m.id)
+          if (own.length) acc.push({ member: m, lessons: own })
+          return acc
+        }, [])
+        return (
+          <section>
+            <div className="flex items-baseline pb-2 mb-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <span className="text-[10px] uppercase tracking-widest text-zinc-500">מערכת שעות</span>
+            </div>
+            {lessonsByChild.map(({ member, lessons: ml }) => {
+              const byDay = ml.reduce<Record<string, Lesson[]>>((a, l) => {
+                ;(a[l.day_of_week] = a[l.day_of_week] || []).push(l)
+                return a
+              }, {})
+              const days = Object.keys(byDay).sort((a, b) => DAY_ORDER[a] - DAY_ORDER[b])
+              const schoolName = ml[0]?.school_name
+              return (
+                <div key={member.id} className="mb-5">
+                  <div className="text-xs text-zinc-300 mb-2">
+                    {member.gender === 'female' ? '👧' : '👦'} <span className="font-medium">{member.name}</span>
+                    {schoolName && <span className="text-zinc-500 mr-2">· {schoolName}</span>}
+                  </div>
+                  {days.map(day => {
+                    const dayLessons = [...byDay[day]].sort((a, b) => a.start_time.localeCompare(b.start_time))
+                    const lastEnd = dayLessons[dayLessons.length - 1]?.end_time
+                    return (
+                      <div key={day} className="mb-2">
+                        <div className="text-[10px] uppercase tracking-widest text-zinc-600 mb-1">יום {DAY_LABEL[day]}</div>
+                        {dayLessons.map(l => (
+                          <div key={l.id} className="flex justify-between py-1 border-b border-zinc-800/40 text-xs">
+                            <span className="text-zinc-400">{l.start_time}–{l.end_time}</span>
+                            <span className="text-zinc-200">{l.subject}{l.teacher && <span className="text-zinc-500"> · {l.teacher}</span>}</span>
+                          </div>
+                        ))}
+                        {lastEnd && <div className="text-[10px] text-zinc-600 mt-0.5">סיום {lastEnd}</div>}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })}
+          </section>
+        )
+      })()}
 
       {editing && (
         <FactModal

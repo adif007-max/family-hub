@@ -64,6 +64,19 @@ export interface Schedule {
   notes: string | null
 }
 
+export interface Lesson {
+  id: string
+  family_id: string
+  child_id: string | null
+  school_name: string | null
+  day_of_week: 'sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat'
+  start_time: string
+  end_time: string
+  subject: string
+  teacher: string | null
+  created_at: string
+}
+
 export interface FamilyMember {
   id: string
   family_id: string

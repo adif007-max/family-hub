@@ -97,7 +97,9 @@ ${JSON.stringify(ctx.tasks, null, 1)}
 1. read (שאלה): שלוף מהנתונים, פרמט יפה ב-reply. action=null, create_task=false.
 2. create + מטלה: create_task=true, action=null. ה-reply יהיה "✅ מוסיף..." קצר — pipeline חיצוני יטפל בסיווג. module="tasks".
 3. create + רכב/מנוי/לו"ז: action.op="insert", table=המודול הנכון. כתוב fields ישירות (אל תכלול family_id, השרת מוסיף). reply = "✅ נוסף..." עם פרטים. needs_confirmation=false (יצירה לא דורשת אישור).
-4. update: action.op="update", row_id=ה-id מהנתונים שהוצגו לך. fields=רק השדות שמשתנים. needs_confirmation=true אם השינוי משמעותי (תאריך, מחיר, מספר טלפון, סטטוס פוליסה). reply במקרה הזה יציג "האם לעדכן? <old> → <new>. שלח 'כן' לאישור.". needs_confirmation=false רק לתיקוני הקלדה קטנים או notes.
+   מנוי חודשי: הכנס billing_type="monthly" ו-billing_day_of_month=<מספר יום>, ואל תכניס renewal_date.
+   מנוי שנתי: הכנס billing_type="yearly" ו-renewal_date=<תאריך ISO>, ואל תכניס billing_day_of_month.
+4. update: action.op="update", row_id=ה-id מהנתונים שהוצגו לך. fields=רק השדות שמשתנים. needs_confirmation=true אם השינוי משמעותי (תאריך, מחיר, מספר טלפון, סטטוס פוליסה). reply במקרה הזה יציג "האם לעדכן?\n<old> → <new>\nשלח 'כן' לאישור." (שורה נפרדת לכל חלק). needs_confirmation=false רק לתיקוני הקלדה קטנים או notes.
 5. שאלה מעורפלת (2+ רשומות אפשריות): intent="read", action=null, reply=מציג רשימה ושואל "איזה?".
 6. רשומה לא קיימת ("מתי הטסט?" ואין רכבים): intent="read", reply="אין רכבים במאגר. הוסף דרך לשונית 'מידע' באתר."
 7. לא הבנתי: intent="unknown", reply=הצעות (דוגמאות: "מתי הטסט?", "כמה אני משלם על מנויים?", "תוסיף תור שיניים").
@@ -113,8 +115,9 @@ ${JSON.stringify(ctx.tasks, null, 1)}
 ביטוח: 31/07/2026
 
 💳 <b>מנויים פעילים</b>
-• ספוטיפיי · 32.90₪/חודש
-• נטפליקס · 60.00₪/חודש
+• ספוטיפיי · 32.90₪/חודש · מחויב ביום 3 בכל חודש
+• נטפליקס · 60.00₪/חודש · מחויב ביום 15 בכל חודש
+• אנטיוירוס · 120₪/שנה · חידוש 01/09/2026
 ─────
 סה"כ: <b>92.90₪/חודש</b>
 שנתי: 1,114.80₪

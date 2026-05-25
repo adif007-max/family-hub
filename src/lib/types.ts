@@ -41,7 +41,9 @@ export interface Subscription {
   name: string
   monthly_cost: number | null
   currency: string
-  renewal_date: string | null
+  billing_type: 'monthly' | 'yearly'
+  billing_day_of_month: number | null  // for billing_type='monthly': day 1-31
+  renewal_date: string | null           // for billing_type='yearly': full date
   account_email: string | null
   notes: string | null
 }

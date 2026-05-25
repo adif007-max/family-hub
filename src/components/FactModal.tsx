@@ -80,6 +80,9 @@ export default function FactModal({ kind, initial, members, onSave, onDelete, on
     if (kind === 'subscription' && patch.monthly_cost !== undefined && patch.monthly_cost !== '') {
       patch.monthly_cost = Number(patch.monthly_cost) || null
     }
+    if (kind === 'subscription' && patch.billing_day_of_month !== undefined && patch.billing_day_of_month !== '') {
+      patch.billing_day_of_month = Number(patch.billing_day_of_month) || null
+    }
     await onSave(patch)
     onClose()
   }
@@ -120,9 +123,46 @@ export default function FactModal({ kind, initial, members, onSave, onDelete, on
               <Field label="שם המנוי *">
                 <input className={inputCls} value={(v.name as string) || ''} onChange={e => set('name', e.target.value)} placeholder="ספוטיפיי / נטפליקס" autoFocus />
               </Field>
+
+              {/* Billing type toggle */}
+              <Field label="סוג חיוב">
+                <div className="flex gap-2">
+                  {(['monthly', 'yearly'] as const).map(bt => {
+                    const active = (v.billing_type || 'yearly') === bt
+                    return (
+                      <button key={bt} type="button"
+                        onClick={() => {
+                          set('billing_type', bt)
+                          if (bt === 'monthly') set('renewal_date', null)
+                          else set('billing_day_of_month', null)
+                        }}
+                        className="flex-1 py-2 rounded-lg text-xs transition-colors"
+                        style={active
+                          ? { background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.5)', color: '#c4b5fd' }
+                          : { border: '1px solid rgba(255,255,255,0.08)', color: '#71717a' }}>
+                        {bt === 'monthly' ? 'חודשי' : 'שנתי'}
+                      </button>
+                    )
+                  })}
+                </div>
+              </Field>
+
               <div className="grid grid-cols-2 gap-3">
-                <Field label="עלות חודשית"><input type="number" className={inputCls} value={(v.monthly_cost as number | string) || ''} onChange={e => set('monthly_cost', e.target.value)} placeholder="35" /></Field>
-                <Field label="תאריך חידוש"><input type="date" className={inputCls} value={(v.renewal_date as string) || ''} onChange={e => set('renewal_date', e.target.value)} /></Field>
+                <Field label="עלות חודשית">
+                  <input type="number" className={inputCls} value={(v.monthly_cost as number | string) || ''} onChange={e => set('monthly_cost', e.target.value)} placeholder="35" />
+                </Field>
+                {(v.billing_type || 'yearly') === 'monthly' ? (
+                  <Field label="יום חיוב בחודש">
+                    <input type="number" min={1} max={31} className={inputCls}
+                      value={(v.billing_day_of_month as number | string) || ''}
+                      onChange={e => set('billing_day_of_month', e.target.value)}
+                      placeholder="1-31" />
+                  </Field>
+                ) : (
+                  <Field label="תאריך חידוש">
+                    <input type="date" className={inputCls} value={(v.renewal_date as string) || ''} onChange={e => set('renewal_date', e.target.value)} />
+                  </Field>
+                )}
               </div>
               <Field label="חשבון (מייל)"><input className={inputCls} value={(v.account_email as string) || ''} onChange={e => set('account_email', e.target.value)} /></Field>
               <Field label="הערות"><textarea rows={2} className={inputCls + ' resize-none'} value={(v.notes as string) || ''} onChange={e => set('notes', e.target.value)} /></Field>

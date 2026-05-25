@@ -57,11 +57,24 @@ export default function InfoTab({ familyId, members }: Props) {
 
   const subsTotal = subscriptions.reduce((a, s) => a + (s.monthly_cost || 0), 0)
 
-  // Sort subs by renewal date ascending (nulls last)
+  // Compute next billing date for a subscription (ISO string or null)
+  function nextBillingDate(s: Subscription): string | null {
+    if (s.billing_type === 'monthly' && s.billing_day_of_month) {
+      const today = new Date(); today.setHours(0, 0, 0, 0)
+      const day = s.billing_day_of_month
+      const candidate = new Date(today.getFullYear(), today.getMonth(), day)
+      if (candidate <= today) candidate.setMonth(candidate.getMonth() + 1)
+      return candidate.toISOString().split('T')[0]
+    }
+    return s.renewal_date
+  }
+
+  // Sort subs by next billing date ascending (nulls last)
   const sortedSubs = [...subscriptions].sort((a, b) => {
-    if (!a.renewal_date) return 1
-    if (!b.renewal_date) return -1
-    return a.renewal_date.localeCompare(b.renewal_date)
+    const da = nextBillingDate(a), db = nextBillingDate(b)
+    if (!da) return 1
+    if (!db) return -1
+    return da.localeCompare(db)
   })
 
   // Sort schedules by member age (Hillel, Rachel, Naomi, Oz) — by created_at in members
@@ -116,16 +129,25 @@ export default function InfoTab({ familyId, members }: Props) {
             <div className="text-xs text-zinc-600 py-2">אין מנויים. לחץ ＋</div>
           )}
           {sortedSubs.map(s => {
-            const ren = fmtDate(s.renewal_date)
+            const nbd = nextBillingDate(s)
+            const billing = fmtDate(nbd)
+            const isMonthly = s.billing_type === 'monthly'
             return (
               <button key={s.id} onClick={() => setEditing({ kind: 'subscription', item: s })}
                 className="w-full text-right py-3 border-b border-zinc-800/60 hover:bg-white/[0.02] transition-colors">
                 <div className="text-sm text-zinc-100">{s.name}</div>
                 <div className="text-xs text-zinc-500 mt-1 space-x-3 space-x-reverse">
                   {s.monthly_cost != null && <span>{s.monthly_cost}₪/חודש</span>}
-                  {s.renewal_date && <span style={{ color: ren.warn === 'red' ? '#f87171' : ren.warn === 'orange' ? '#fb923c' : undefined }}>
-                    חידוש {ren.label} {ren.warn && '⚠'}
-                  </span>}
+                  {isMonthly && s.billing_day_of_month && (
+                    <span style={{ color: billing.warn === 'red' ? '#f87171' : billing.warn === 'orange' ? '#fb923c' : undefined }}>
+                      מחויב ביום {s.billing_day_of_month} בכל חודש {billing.warn && `(${billing.label} ⚠)`}
+                    </span>
+                  )}
+                  {!isMonthly && s.renewal_date && (
+                    <span style={{ color: billing.warn === 'red' ? '#f87171' : billing.warn === 'orange' ? '#fb923c' : undefined }}>
+                      חידוש {billing.label} {billing.warn && '⚠'}
+                    </span>
+                  )}
                 </div>
               </button>
             )

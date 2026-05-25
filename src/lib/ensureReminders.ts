@@ -49,7 +49,28 @@ function planVehicle(v: Vehicle): Plan[] {
   return out
 }
 
+function nextMonthlyBillingDate(day: number): string {
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const candidate = new Date(today.getFullYear(), today.getMonth(), day)
+  if (candidate <= today) candidate.setMonth(candidate.getMonth() + 1)
+  return candidate.toISOString().split('T')[0]
+}
+
 function planSubscription(s: Subscription): Plan[] {
+  if (s.billing_type === 'monthly') {
+    if (!s.billing_day_of_month) return []
+    const due = nextMonthlyBillingDate(s.billing_day_of_month)
+    const d = daysUntil(due)
+    if (d === null || d > 3 || d < 0) return []
+    return [{
+      source_fact_id: s.id,
+      source_fact_table: 'subscriptions',
+      text: `תזכורת: חיוב ${s.name} (ביום ${s.billing_day_of_month})`,
+      due_date: due,
+      priority: d <= 1 ? 'urgent' : 'normal',
+    }]
+  }
+  // yearly
   if (!s.renewal_date) return []
   const d = daysUntil(s.renewal_date)
   if (d === null || d >= 30 || d < -1) return []

@@ -275,8 +275,12 @@ export async function POST(req: NextRequest) {
     const res = await executeAction(pending.action, tgUser.family_id)
     await clearPending(chatId)
     if (res.ok) {
-      // Replace the "האם לעדכן?" prefix in the original reply with "✅ עודכן"
-      const ack = pending.reply.replace(/^[^\n]*\n/, '✅ עודכן\n')
+      // Replace the "האם לעדכן?" first line with "✅ עודכן",
+      // then strip the trailing confirmation prompt line ("שלח 'כן' לאישור.")
+      const ack = pending.reply
+        .replace(/^[^\n]*\n/, '✅ עודכן\n')
+        .replace(/\n?שלח ["״'']?כן["״'']? לאישור\.?\s*$/i, '')
+        .trim()
       await sendMessage(chatId, ack)
     } else {
       await sendMessage(chatId, `⚠️ העדכון נכשל: ${res.error}`)

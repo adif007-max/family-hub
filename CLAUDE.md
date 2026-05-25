@@ -37,7 +37,8 @@ Next.js 16 family task manager for עדי ותהלה (family `fink`).
 - Task items: no per-card background, divider lines only; urgent shows a thin red rail on the right edge
 - Modals: dark `#0a0a0f` + subtle border + `rounded-xl` + simple ✕ close in corner
 - `src/app/api/sort-inbox/route.ts` — receives { items, familyId }, calls `sortInbox()`
-- `src/app/api/telegram/webhook/route.ts` — Telegram bot; secret-token verified; commands + free-text sort
+- `src/app/api/telegram/webhook/route.ts` — Telegram bot; intent classification + dispatch (read/create/update across all modules) + confirmation flow
+- `src/lib/bot-intent.ts` — single-call Haiku brain: receives full family context, returns intent + reply + action
 - `src/app/settings/family/page.tsx` — edit/add/archive children
 - `supabase-schema.sql` — base schema (RLS, profiles, allowed_emails)
 - `supabase-migrations/002_telegram_and_members.sql` — telegram_users, family_members, tasks.related_member_ids

@@ -1,6 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { sortInbox } from '@/lib/sort-inbox'
+import { processBotMessage, BotAction } from '@/lib/bot-intent'
+
+const CONFIRM_RE = /^(כן|אישור|אשר|אשר?י|yes|y|ok|אוקיי)\.?$/i
+
+async function getPending(chatId: number): Promise<{ action: BotAction; reply: string } | null> {
+  const { data } = await supabaseAdmin
+    .from('pending_bot_updates')
+    .select('action, reply, created_at')
+    .eq('chat_id', chatId)
+    .maybeSingle()
+  if (!data) return null
+  const ageMs = Date.now() - new Date(data.created_at).getTime()
+  if (ageMs > 5 * 60 * 1000) {
+    await supabaseAdmin.from('pending_bot_updates').delete().eq('chat_id', chatId)
+    return null
+  }
+  return { action: data.action as BotAction, reply: data.reply as string }
+}
+
+async function clearPending(chatId: number) {
+  await supabaseAdmin.from('pending_bot_updates').delete().eq('chat_id', chatId)
+}
+
+async function savePending(chatId: number, action: BotAction, reply: string) {
+  await supabaseAdmin.from('pending_bot_updates').upsert({
+    chat_id: chatId, action, reply, created_at: new Date().toISOString(),
+  })
+}
+
+async function executeAction(action: BotAction, familyId: string): Promise<{ ok: boolean; error?: string }> {
+  if (action.op === 'insert') {
+    const { error } = await supabaseAdmin.from(action.table).insert({ ...action.fields, family_id: familyId })
+    if (error) return { ok: false, error: error.message }
+  } else {
+    if (!action.row_id) return { ok: false, error: 'row_id חסר' }
+    const { error } = await supabaseAdmin.from(action.table)
+      .update({ ...action.fields, updated_at: new Date().toISOString() })
+      .eq('id', action.row_id)
+    if (error) return { ok: false, error: error.message }
+  }
+  return { ok: true }
+}
 
 // Telegram Update payload shape (only fields we use)
 interface TgMessage {
@@ -223,40 +265,88 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // Free-text → AI sort + insert
+  // Confirmation shortcut: if user says "כן" and there's a pending update — execute it.
+  if (CONFIRM_RE.test(text)) {
+    const pending = await getPending(chatId)
+    if (!pending) {
+      await sendMessage(chatId, 'אין מה לאשר כרגע.')
+      return NextResponse.json({ ok: true })
+    }
+    const res = await executeAction(pending.action, tgUser.family_id)
+    await clearPending(chatId)
+    if (res.ok) {
+      // Replace the "האם לעדכן?" prefix in the original reply with "✅ עודכן"
+      const ack = pending.reply.replace(/^[^\n]*\n/, '✅ עודכן\n')
+      await sendMessage(chatId, ack)
+    } else {
+      await sendMessage(chatId, `⚠️ העדכון נכשל: ${res.error}`)
+    }
+    return NextResponse.json({ ok: true })
+  }
+
+  // New message — clear any stale pending so we don't confuse follow-ups
+  await clearPending(chatId)
+
+  // Free-text → Bot brain (intent + reply + optional action)
   try {
-    const sorted = await sortInbox([text], tgUser.family_id)
-    if (!sorted.length) {
-      await sendMessage(chatId, '⚠️ לא הצלחתי לסווג את המטלה. נסה שוב.')
+    const result = await processBotMessage(text, tgUser.family_id)
+
+    // Path 1: create a task — route through sortInbox (existing pipeline)
+    if (result.create_task) {
+      const sorted = await sortInbox([text], tgUser.family_id)
+      if (!sorted.length) {
+        await sendMessage(chatId, '⚠️ לא הצלחתי לסווג את המטלה. נסה שוב.')
+        return NextResponse.json({ ok: true })
+      }
+      const inserts = sorted.map(s => ({
+        family_id: tgUser.family_id,
+        text: s.text,
+        category: s.cat,
+        assignee: s.assignee,
+        priority: s.priority,
+        related_member_ids: s.related_member_ids,
+      }))
+      await supabaseAdmin.from('tasks').insert(inserts)
+
+      const members = await loadMembers(tgUser.family_id)
+      const replyLines = sorted.map(s => {
+        const kids = s.related_member_ids
+          .map(id => members.find(m => m.id === id))
+          .filter(Boolean)
+          .map(m => (m!.gender === 'female' ? '👧' : '👦') + ' ' + m!.name)
+          .join(' ')
+        const parts = [
+          `📁 ${CAT_LABEL[s.cat] || s.cat}`,
+          `${PRI_ICON[s.priority]} ${s.priority === 'urgent' ? 'דחוף' : s.priority === 'soon' ? 'השבוע' : 'רגיל'}`,
+          `👤 ${ASGN_LABEL[s.assignee]}`,
+        ]
+        if (kids) parts.push(kids)
+        return `✅ <b>${escapeHtml(s.text)}</b>\n   ${parts.join(' · ')}`
+      })
+      await sendMessage(chatId, replyLines.join('\n\n'))
       return NextResponse.json({ ok: true })
     }
 
-    const inserts = sorted.map(s => ({
-      family_id: tgUser.family_id,
-      text: s.text,
-      category: s.cat,
-      assignee: s.assignee,
-      priority: s.priority,
-      related_member_ids: s.related_member_ids,
-    }))
-    await supabaseAdmin.from('tasks').insert(inserts)
+    // Path 2: action that needs confirmation — store + ask
+    if (result.action && result.action.needs_confirmation) {
+      await savePending(chatId, result.action, result.reply)
+      await sendMessage(chatId, result.reply)
+      return NextResponse.json({ ok: true })
+    }
 
-    const members = await loadMembers(tgUser.family_id)
-    const replyLines = sorted.map(s => {
-      const kids = s.related_member_ids
-        .map(id => members.find(m => m.id === id))
-        .filter(Boolean)
-        .map(m => (m!.gender === 'female' ? '👧' : '👦') + ' ' + m!.name)
-        .join(' ')
-      const parts = [
-        `📁 ${CAT_LABEL[s.cat] || s.cat}`,
-        `${PRI_ICON[s.priority]} ${s.priority === 'urgent' ? 'דחוף' : s.priority === 'soon' ? 'השבוע' : 'רגיל'}`,
-        `👤 ${ASGN_LABEL[s.assignee]}`,
-      ]
-      if (kids) parts.push(kids)
-      return `✅ <b>${escapeHtml(s.text)}</b>\n   ${parts.join(' · ')}`
-    })
-    await sendMessage(chatId, replyLines.join('\n\n'))
+    // Path 3: action without confirmation (create/insert or minor update) — execute now
+    if (result.action) {
+      const res = await executeAction(result.action, tgUser.family_id)
+      if (res.ok) {
+        await sendMessage(chatId, result.reply)
+      } else {
+        await sendMessage(chatId, `⚠️ הפעולה נכשלה: ${res.error}`)
+      }
+      return NextResponse.json({ ok: true })
+    }
+
+    // Path 4: read or unknown — Haiku already wrote the reply
+    await sendMessage(chatId, result.reply)
   } catch (e) {
     console.error('telegram free-text error', e)
     await sendMessage(chatId, '⚠️ שגיאה בהוספת המטלה. נסה שוב.')

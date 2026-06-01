@@ -6,7 +6,7 @@ import { buildDailyDigest, israelToday } from '@/lib/digest'
 import { buildWeekSummary } from '@/lib/weekSummary'
 import { getUpcomingRenewals } from '@/lib/renewals'
 import { formatDigest, formatWeekSummary, formatRenewals, formatHealth, HealthData, esc } from '@/lib/telegramFormatters'
-import { isDoneIntent, matchDoneText } from '@/lib/doneMatcher'
+import { isDoneIntent, isVagueDoneIntent, matchDoneText } from '@/lib/doneMatcher'
 
 const CONFIRM_RE = /^(כן|אישור|אשר|אשר?י|yes|y|ok|אוקיי)\.?$/i
 const NUMBER_RE  = /^\d+$/
@@ -575,7 +575,24 @@ export async function POST(req: NextRequest) {
 
   if (isDoneIntent(text)) {
     const candidates = await queryDoneCandidates(familyId, role)
-    const match      = matchDoneText(text, candidates)
+
+    // Vague intent ("סמן אלה בוצעו", "כולם", "הכל") → show full keyboard
+    if (isVagueDoneIntent(text)) {
+      if (!candidates.length) {
+        await sendMessage(chatId, 'אין מטלות פתוחות')
+        return NextResponse.json({ ok: true })
+      }
+      const today    = israelToday()
+      const keyboard = buildDoneKeyboard(candidates, today)
+      await savePending(chatId, {
+        table: 'tasks', op: 'done_pick', row_id: null, fields: {},
+        needs_confirmation: false, task_ids: candidates.map(t => t.id),
+      }, '')
+      await sendWithKeyboard(chatId, 'איזו מטלה?', keyboard)
+      return NextResponse.json({ ok: true })
+    }
+
+    const match = matchDoneText(text, candidates)
 
     if (match.kind === 'single') {
       const res = await markTaskDone(match.taskId)
@@ -599,8 +616,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
-    // No match — fall through to Haiku (might be a question)
-    await sendMessage(chatId, 'לא נמצאה משימה')
+    // No text match — show keyboard anyway rather than "לא נמצאה משימה"
+    if (candidates.length) {
+      const today    = israelToday()
+      const keyboard = buildDoneKeyboard(candidates, today)
+      await savePending(chatId, {
+        table: 'tasks', op: 'done_pick', row_id: null, fields: {},
+        needs_confirmation: false, task_ids: candidates.map(t => t.id),
+      }, '')
+      await sendWithKeyboard(chatId, 'איזו מטלה?', keyboard)
+    } else {
+      await sendMessage(chatId, 'אין מטלות פתוחות')
+    }
     return NextResponse.json({ ok: true })
   }
 

@@ -57,29 +57,29 @@ export default function TaskModal({ task, defaultCategory, members, onSave, onCl
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }} onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="w-full max-w-lg rounded-t-3xl p-6 pb-8 animate-slide-up overflow-y-auto max-h-[90vh]"
-        style={{ background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.08)' }}>
-        <div className="w-10 h-1 rounded-full mx-auto mb-5" style={{ background: 'rgba(255,255,255,0.15)' }} />
-        <h2 className="text-lg font-extrabold mb-5">{task ? 'עריכת מטלה' : 'מטלה חדשה'}</h2>
+        style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 -4px 32px rgba(0,0,0,0.08)' }}>
+        <div className="w-10 h-1 rounded-full mx-auto mb-5" style={{ background: 'rgba(0,0,0,0.1)' }} />
+        <h2 className="text-lg font-bold mb-5" style={{ color: '#111827' }}>{task ? 'עריכת מטלה' : 'מטלה חדשה'}</h2>
 
         {/* Text */}
         <div className="mb-4">
-          <label className="text-xs text-gray-400 mb-1.5 block">תיאור המטלה *</label>
+          <label className="text-xs mb-1.5 block" style={{ color: '#6B7280' }}>תיאור המטלה *</label>
           <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => e.key === 'Enter' && save()}
-            className="w-full px-4 py-2.5 rounded-xl text-sm outline-none text-white"
-            style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)' }}
+            className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+            style={{ background: '#F9FAFB', border: '1px solid rgba(0,0,0,0.1)', color: '#111827' }}
             placeholder="לדוגמה: תור לרופא — הלל" autoFocus />
         </div>
 
         {/* Category */}
         <div className="mb-4">
-          <label className="text-xs text-gray-400 mb-1.5 block">קטגוריה</label>
+          <label className="text-xs mb-1.5 block" style={{ color: '#6B7280' }}>קטגוריה</label>
           <div className="grid grid-cols-4 gap-2">
             {CATEGORIES.map(c => (
               <button key={c.id} onClick={() => setCat(c.id)}
                 className="py-2 rounded-xl text-center text-xs font-semibold transition-all"
                 style={cat === c.id
-                  ? { background: 'rgba(167,139,250,0.2)', border: '1px solid rgba(167,139,250,0.4)', color: '#c4b5fd' }
-                  : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', color: '#6b7280' }}>
+                  ? { background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.4)', color: '#3B82F6' }
+                  : { background: '#F9FAFB', border: '1px solid rgba(0,0,0,0.08)', color: '#6B7280' }}>
                 <div className="text-lg mb-0.5">{c.icon}</div>{c.name.split('—')[0].trim()}
               </button>
             ))}
@@ -88,14 +88,14 @@ export default function TaskModal({ task, defaultCategory, members, onSave, onCl
 
         {/* Assignee */}
         <div className="mb-4">
-          <label className="text-xs text-gray-400 mb-1.5 block">אחראי</label>
+          <label className="text-xs mb-1.5 block" style={{ color: '#6B7280' }}>אחראי</label>
           <div className="flex gap-2">
             {([['adi','👨 עדי'],['tahel','👩 תהלה'],['both','👫 שניכם']] as [Assignee, string][]).map(([val, lbl]) => (
               <button key={val} onClick={() => setAssignee(val)}
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all"
                 style={assignee === val
-                  ? { background: 'rgba(124,58,237,0.2)', border: '2px solid rgba(124,58,237,0.5)', color: '#c4b5fd' }
-                  : { background: 'rgba(255,255,255,0.04)', border: '2px solid rgba(255,255,255,0.07)', color: '#6b7280' }}>
+                  ? { background: 'rgba(124,58,237,0.1)', border: '2px solid rgba(124,58,237,0.5)', color: '#7C3AED' }
+                  : { background: '#F9FAFB', border: '2px solid rgba(0,0,0,0.08)', color: '#6B7280' }}>
                 {lbl}
               </button>
             ))}
@@ -104,14 +104,14 @@ export default function TaskModal({ task, defaultCategory, members, onSave, onCl
 
         {/* Priority */}
         <div className="mb-4">
-          <label className="text-xs text-gray-400 mb-1.5 block">עדיפות</label>
+          <label className="text-xs mb-1.5 block" style={{ color: '#6B7280' }}>עדיפות</label>
           <div className="flex gap-2 flex-wrap">
-            {([['urgent','🔴 דחוף','#f87171','rgba(248,113,113,0.2)'],['soon','🟠 השבוע','#fb923c','rgba(251,146,60,0.2)'],['normal','🟣 רגיל','#a78bfa','rgba(167,139,250,0.2)'],['low','⚪ נמוך','#94a3b8','rgba(100,116,139,0.2)']] as [Priority, string, string, string][]).map(([val, lbl, col, bg]) => (
+            {([['urgent','🔥 דחוף','#F97316','rgba(249,115,22,0.12)'],['soon','⏰ השבוע','#3B82F6','rgba(59,130,246,0.12)'],['normal','✅ רגיל','#6B7280','rgba(107,114,128,0.1)'],['low','⚪ נמוך','#9CA3AF','rgba(107,114,128,0.08)']] as [Priority, string, string, string][]).map(([val, lbl, col, bg]) => (
               <button key={val} onClick={() => setPriority(val)}
                 className="px-4 py-1.5 rounded-full text-xs font-semibold transition-all"
                 style={priority === val
                   ? { background: bg, border: `1px solid ${col}`, color: col }
-                  : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', color: '#6b7280' }}>
+                  : { background: '#F9FAFB', border: '1px solid rgba(0,0,0,0.08)', color: '#9CA3AF' }}>
                 {lbl}
               </button>
             ))}
@@ -121,7 +121,7 @@ export default function TaskModal({ task, defaultCategory, members, onSave, onCl
         {/* Children */}
         {activeMembers.length > 0 && (
           <div className="mb-4">
-            <label className="text-xs text-gray-400 mb-1.5 block">שייך לילדים</label>
+            <label className="text-xs mb-1.5 block" style={{ color: '#6B7280' }}>שייך לילדים</label>
             <div className="flex flex-wrap gap-1.5">
               {activeMembers.map(m => {
                 const active = memberIds.includes(m.id)
@@ -130,8 +130,8 @@ export default function TaskModal({ task, defaultCategory, members, onSave, onCl
                   <button key={m.id} type="button" onClick={() => toggleMember(m.id)}
                     className="px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
                     style={active
-                      ? { background: 'rgba(244,114,182,0.15)', border: '1px solid rgba(244,114,182,0.45)', color: '#f9a8d4' }
-                      : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#9ca3af' }}>
+                      ? { background: 'rgba(236,72,153,0.1)', border: '1px solid rgba(236,72,153,0.4)', color: '#EC4899' }
+                      : { background: '#F9FAFB', border: '1px solid rgba(0,0,0,0.08)', color: '#9CA3AF' }}>
                     {emoji} {m.name}
                   </button>
                 )
@@ -143,16 +143,16 @@ export default function TaskModal({ task, defaultCategory, members, onSave, onCl
         {/* Due + Recur */}
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
-            <label className="text-xs text-gray-400 mb-1.5 block">תאריך יעד</label>
+            <label className="text-xs mb-1.5 block" style={{ color: '#6B7280' }}>תאריך יעד</label>
             <input type="date" value={due} onChange={e => setDue(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none text-white"
-              style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)' }} />
+              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
+              style={{ background: '#F9FAFB', border: '1px solid rgba(0,0,0,0.1)', color: '#111827' }} />
           </div>
           <div>
-            <label className="text-xs text-gray-400 mb-1.5 block">חזרה</label>
+            <label className="text-xs mb-1.5 block" style={{ color: '#6B7280' }}>חזרה</label>
             <select value={recur} onChange={e => setRecur(e.target.value as Recur)}
-              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none text-white"
-              style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)' }}>
+              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
+              style={{ background: '#F9FAFB', border: '1px solid rgba(0,0,0,0.1)', color: '#111827' }}>
               <option value="">ללא</option>
               <option value="daily">יומי</option>
               <option value="weekly">שבועי</option>
@@ -163,18 +163,18 @@ export default function TaskModal({ task, defaultCategory, members, onSave, onCl
 
         {/* Note */}
         <div className="mb-6">
-          <label className="text-xs text-gray-400 mb-1.5 block">הערה</label>
+          <label className="text-xs mb-1.5 block" style={{ color: '#6B7280' }}>הערה</label>
           <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
-            className="w-full px-3 py-2.5 rounded-xl text-sm outline-none text-white resize-none"
-            style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)' }}
+            className="w-full px-3 py-2.5 rounded-xl text-sm outline-none resize-none"
+            style={{ background: '#F9FAFB', border: '1px solid rgba(0,0,0,0.1)', color: '#111827' }}
             placeholder="פרטים נוספים..." />
         </div>
 
         <div className="flex gap-3">
-          <button onClick={onClose} className="px-5 py-3 rounded-2xl text-sm font-semibold text-gray-400 transition-all hover:text-white"
-            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>ביטול</button>
+          <button onClick={onClose} className="px-5 py-3 rounded-2xl text-sm font-semibold transition-all"
+            style={{ background: '#F3F4F6', border: '1px solid rgba(0,0,0,0.08)', color: '#6B7280' }}>ביטול</button>
           <button onClick={save} className="flex-1 py-3 rounded-2xl text-sm font-bold text-white transition-all"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)' }}>שמור מטלה</button>
+            style={{ background: 'linear-gradient(135deg, #3B82F6, #2563EB)' }}>שמור מטלה</button>
         </div>
       </div>
     </div>

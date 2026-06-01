@@ -30,15 +30,15 @@ function gcalUrl(task: Task) {
 }
 
 const PRIORITY_STYLES: Record<string, { label: string; bg: string; color: string }> = {
-  urgent: { label: '🔴 דחוף',  bg: 'rgba(248,113,113,0.15)', color: '#f87171' },
-  soon:   { label: '🟠 השבוע', bg: 'rgba(251,146,60,0.15)',  color: '#fb923c' },
-  normal: { label: 'רגיל',      bg: 'rgba(167,139,250,0.12)', color: '#a78bfa' },
-  low:    { label: 'נמוך',      bg: 'rgba(100,116,139,0.15)', color: '#94a3b8' },
+  urgent: { label: '🔥 דחוף',  bg: 'rgba(249,115,22,0.12)',  color: '#F97316' },
+  soon:   { label: '⏰ השבוע', bg: 'rgba(59,130,246,0.12)',   color: '#3B82F6' },
+  normal: { label: 'רגיל',      bg: 'rgba(107,114,128,0.10)', color: '#6B7280' },
+  low:    { label: 'נמוך',      bg: 'rgba(107,114,128,0.08)', color: '#9CA3AF' },
 }
 const ASSIGNEE: Record<string, { label: string; bg: string }> = {
-  adi:   { label: 'ע', bg: '#7c3aed' },
-  tahel: { label: 'ת', bg: '#0891b2' },
-  both:  { label: 'שנ', bg: '#065f46' },
+  adi:   { label: 'ע', bg: '#7C3AED' },
+  tahel: { label: 'ת', bg: '#0891B2' },
+  both:  { label: 'שנ', bg: '#059669' },
 }
 const RECUR: Record<string, string> = { daily: '🔄 יומי', weekly: '🔄 שבועי', monthly: '🔄 חודשי' }
 
@@ -75,19 +75,19 @@ export default function TaskItem({ task, members = [], onToggle, onEdit, onDelet
       onClick={() => onToggle(task.id)}
       className="group flex items-start gap-3 py-3 px-1 cursor-pointer transition-colors relative hover:bg-white/[0.02]"
       style={{
-        borderBottom: '1px solid rgba(255,255,255,0.05)',
+        borderBottom: '1px solid rgba(0,0,0,0.06)',
         opacity: task.done ? 0.5 : 1,
       }}
     >
       {task.priority === 'urgent' && !task.done && (
-        <div className="absolute right-0 top-2 bottom-2 w-0.5 rounded-full" style={{ background: '#f87171' }} />
+        <div className="absolute right-0 top-2 bottom-2 w-0.5 rounded-full" style={{ background: '#F97316' }} />
       )}
 
       {/* Checkbox */}
       <div className="flex-shrink-0 mt-0.5 w-5 h-5 rounded-md flex items-center justify-center text-xs font-bold transition-all"
         style={task.done
-          ? { background: '#34d399', border: '2px solid #34d399', color: '#000' }
-          : { border: '2px solid rgba(255,255,255,0.2)' }}>
+          ? { background: '#22C55E', border: '2px solid #22C55E', color: '#fff' }
+          : { border: '2px solid rgba(0,0,0,0.18)' }}>
         {task.done && '✓'}
       </div>
 
@@ -99,12 +99,12 @@ export default function TaskItem({ task, members = [], onToggle, onEdit, onDelet
         {!compact && hasAnyChip && (
           <div className="flex flex-wrap gap-1.5 items-center mt-1.5">
             {showPriorityChip && <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: pri.bg, color: pri.color }}>{pri.label}</span>}
-            {task.done && <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(52,211,153,0.12)', color: '#34d399' }}>✓ הושלם</span>}
+            {task.done && <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(34,197,94,0.12)', color: '#16A34A' }}>✓ הושלם</span>}
             {showDueChip && <span className="text-xs" style={{ color: due!.cls }}>📅 {due!.label}</span>}
-            {showRecurChip && <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)', color: '#60a5fa' }}>{RECUR[task.recur]}</span>}
+            {showRecurChip && <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)', color: '#3B82F6' }}>{RECUR[task.recur]}</span>}
             {relatedMembers.map(m => (
               <span key={m.id} className="text-xs px-1.5 py-0.5 rounded-full"
-                style={{ background: 'rgba(244,114,182,0.10)', border: '1px solid rgba(244,114,182,0.25)', color: '#f9a8d4' }}>
+                style={{ background: 'rgba(236,72,153,0.10)', border: '1px solid rgba(236,72,153,0.25)', color: '#EC4899' }}>
                 {m.gender === 'female' ? '👧' : '👦'} {m.name}
               </span>
             ))}

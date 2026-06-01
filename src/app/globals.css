@@ -2,28 +2,69 @@
 @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap');
 
 :root {
-  --bg: #0f0f1a;
-  --surface: rgba(255,255,255,0.04);
-  --surface2: rgba(255,255,255,0.07);
-  --border: rgba(255,255,255,0.08);
-  --border2: rgba(255,255,255,0.15);
+  --bg:       #EEF3FA;
+  --surface:  #FFFFFF;
+  --surface2: #F5F8FF;
+  --border:   rgba(0,0,0,0.08);
+  --border2:  rgba(0,0,0,0.15);
+  --text:     #111827;
+  --text2:    #4B5563;
+  --text3:    #9CA3AF;
+
+  /* Accent palette from nutrition app screenshot */
+  --orange:   #F97316;
+  --blue:     #3B82F6;
+  --green:    #22C55E;
+  --pink:     #EC4899;
+  --purple:   #7C3AED;
+  --cyan:     #0891B2;
 }
 
 * { box-sizing: border-box; }
 
 body {
-  background: #0f0f1a;
-  color: #f0f0f5;
+  background: var(--bg);
+  color: var(--text);
   font-family: 'Heebo', sans-serif;
   direction: rtl;
   min-height: 100vh;
   overflow-x: hidden;
 }
 
+/* ── Override dark zinc classes ────────────────────────────────────────────── */
+/* These map the dark-theme zinc palette to the light theme equivalents */
+
+.text-zinc-100 { color: #111827 !important; }
+.text-zinc-200 { color: #1F2937 !important; }
+.text-zinc-300 { color: #374151 !important; }
+.text-zinc-400 { color: #6B7280 !important; }
+.text-zinc-500 { color: #9CA3AF !important; }
+.text-zinc-600 { color: #9CA3AF !important; }
+.text-zinc-700 { color: #D1D5DB !important; }
+
+.bg-zinc-950, .bg-zinc-900 { background-color: #FFFFFF !important; }
+.bg-zinc-800               { background-color: #F3F4F6 !important; }
+.bg-zinc-700               { background-color: #E5E7EB !important; }
+
+.border-zinc-900 { border-color: rgba(0,0,0,0.06) !important; }
+.border-zinc-800 { border-color: rgba(0,0,0,0.08) !important; }
+.border-zinc-700 { border-color: rgba(0,0,0,0.12) !important; }
+
+/* Hover overrides */
+.hover\:bg-white\/\[0\.02\]:hover { background-color: rgba(0,0,0,0.02) !important; }
+.hover\:bg-white\/5:hover         { background-color: rgba(0,0,0,0.04) !important; }
+.hover\:text-zinc-100:hover       { color: #111827 !important; }
+.hover\:text-zinc-200:hover       { color: #1F2937 !important; }
+
+/* placeholder */
+.placeholder\:text-zinc-600::placeholder { color: #9CA3AF !important; }
+
+/* ── Scrollbar ──────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 10px; }
 
+/* ── Animations ─────────────────────────────────────────────────────────────── */
 @keyframes slideUp {
   from { transform: translateY(100%); opacity: 0; }
   to   { transform: translateY(0); opacity: 1; }

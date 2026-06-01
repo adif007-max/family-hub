@@ -107,24 +107,24 @@ export default function TaskBoard({ tasks, members, onToggle, onEdit, onDelete, 
         <span className="uppercase tracking-widest text-[10px]">עומס</span>
         <span className="text-zinc-600">·</span>
         <span className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#a78bfa' }} />
-          <span className="text-zinc-300">עדי</span>
-          <span className="text-zinc-500">{adiLoad}</span>
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#7C3AED' }} />
+          <span style={{ color: '#374151' }}>עדי</span>
+          <span style={{ color: '#9CA3AF' }}>{adiLoad}</span>
         </span>
-        <span className="text-zinc-600">·</span>
+        <span style={{ color: '#D1D5DB' }}>·</span>
         <span className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#22d3ee' }} />
-          <span className="text-zinc-300">תהלה</span>
-          <span className="text-zinc-500">{tahelLoad}</span>
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#0891B2' }} />
+          <span style={{ color: '#374151' }}>תהלה</span>
+          <span style={{ color: '#9CA3AF' }}>{tahelLoad}</span>
         </span>
       </div>
 
       {/* View toggle — text, underline-style */}
-      <div className="flex gap-5 text-sm pb-1" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+      <div className="flex gap-5 text-sm pb-1" style={{ borderBottom: '1px solid rgba(0,0,0,0.07)' }}>
         <button onClick={() => switchView('list')}
           style={{
-            color: viewMode === 'list' ? '#e4e4e7' : '#71717a',
-            borderBottom: viewMode === 'list' ? '2px solid #e4e4e7' : '2px solid transparent',
+            color: viewMode === 'list' ? '#111827' : '#9CA3AF',
+            borderBottom: viewMode === 'list' ? '2px solid #3B82F6' : '2px solid transparent',
             paddingBottom: '4px',
             marginBottom: '-1px',
           }}>
@@ -132,8 +132,8 @@ export default function TaskBoard({ tasks, members, onToggle, onEdit, onDelete, 
         </button>
         <button onClick={() => switchView('calendar')}
           style={{
-            color: viewMode === 'calendar' ? '#e4e4e7' : '#71717a',
-            borderBottom: viewMode === 'calendar' ? '2px solid #e4e4e7' : '2px solid transparent',
+            color: viewMode === 'calendar' ? '#111827' : '#9CA3AF',
+            borderBottom: viewMode === 'calendar' ? '2px solid #3B82F6' : '2px solid transparent',
             paddingBottom: '4px',
             marginBottom: '-1px',
           }}>
@@ -160,7 +160,7 @@ export default function TaskBoard({ tasks, members, onToggle, onEdit, onDelete, 
         </svg>
         <input value={search} onChange={e => setSearch(e.target.value)}
           className="w-full pr-9 pl-3 py-2 rounded-lg text-sm outline-none text-zinc-100 placeholder:text-zinc-600 transition-colors"
-          style={{ background: 'rgba(24,24,27,0.4)', border: '1px solid #27272a' }}
+          style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.1)' }}
           placeholder="חיפוש מטלה" />
       </div>
 
@@ -170,7 +170,7 @@ export default function TaskBoard({ tasks, members, onToggle, onEdit, onDelete, 
           {(filterTime !== 'all' || filterMember !== 'all') && (
             <button onClick={() => { setFilterTime('all'); setFilterMember('all') }}
               className="px-2.5 py-1 rounded-full text-[11px] text-zinc-500 hover:text-zinc-100 transition-colors"
-              style={{ border: '1px solid #27272a' }}>
+              style={{ border: '1px solid rgba(0,0,0,0.1)' }}>
               ✕ נקה
             </button>
           )}
@@ -180,8 +180,8 @@ export default function TaskBoard({ tasks, members, onToggle, onEdit, onDelete, 
               <button key={c.id} onClick={() => setFilterTime(active ? 'all' : c.id)}
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] transition-colors"
                 style={active
-                  ? { background: '#27272a', border: '1px solid #3f3f46', color: '#f4f4f5' }
-                  : { background: 'transparent', border: '1px solid #27272a', color: '#a1a1aa' }}>
+                  ? { background: '#3B82F6', border: '1px solid #3B82F6', color: '#FFFFFF' }
+                  : { background: 'transparent', border: '1px solid rgba(0,0,0,0.12)', color: '#6B7280' }}>
                 <span>{c.label}</span>
                 <span style={{ color: active ? (c.tone || '#a1a1aa') : '#71717a' }}>{c.count}</span>
               </button>
@@ -194,8 +194,8 @@ export default function TaskBoard({ tasks, members, onToggle, onEdit, onDelete, 
               <button key={m.id} onClick={() => setFilterMember(active ? 'all' : m.id)}
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] transition-colors"
                 style={active
-                  ? { background: '#27272a', border: '1px solid #3f3f46', color: '#f4f4f5' }
-                  : { background: 'transparent', border: '1px solid #27272a', color: '#a1a1aa' }}>
+                  ? { background: '#3B82F6', border: '1px solid #3B82F6', color: '#FFFFFF' }
+                  : { background: 'transparent', border: '1px solid rgba(0,0,0,0.12)', color: '#6B7280' }}>
                 <span>{m.gender === 'female' ? '👧' : '👦'} {m.name}</span>
                 <span className="text-zinc-500">{count}</span>
               </button>
@@ -212,8 +212,8 @@ export default function TaskBoard({ tasks, members, onToggle, onEdit, onDelete, 
             <button key={val} onClick={() => setFilterAssignee(val)}
               className="px-2.5 py-1 transition-colors"
               style={{
-                color: active ? '#e4e4e7' : '#71717a',
-                borderBottom: active ? '1px solid #e4e4e7' : '1px solid transparent',
+                color: active ? '#111827' : '#9CA3AF',
+                borderBottom: active ? '1px solid #3B82F6' : '1px solid transparent',
               }}>
               {lbl}
             </button>

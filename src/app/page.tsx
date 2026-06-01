@@ -24,8 +24,8 @@ const TABS: { id: Tab; label: string }[] = [
 
 function Loader() {
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: '#0a0a0f' }}>
-      <div className="text-3xl animate-pulse text-zinc-400">✨</div>
+    <div className="min-h-screen flex items-center justify-center" style={{ background: '#EEF3FA' }}>
+      <div className="text-3xl animate-pulse" style={{ color: '#9CA3AF' }}>✨</div>
     </div>
   )
 }
@@ -58,7 +58,7 @@ export default function Home() {
   if (!session) return <MagicLinkLogin />
   if (!familyId) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center" style={{ background: '#0a0a0f' }}>
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center" style={{ background: '#EEF3FA' }}>
         <div className="text-3xl mb-3">🔒</div>
         <div className="text-base text-zinc-300 mb-2">המייל הזה לא מורשה</div>
         <div className="text-xs text-zinc-500 mb-6">פנה לעדי כדי להוסיף אותך למשפחה</div>
@@ -74,35 +74,29 @@ export default function Home() {
   const urgentCount = tasks.filter(t => t.priority === 'urgent' && !t.done).length
 
   return (
-    <div className="min-h-screen pb-24" style={{ background: '#0a0a0f', color: '#e4e4e7' }}>
-      {/* subtle ambient glow */}
-      <div className="fixed top-0 right-0 w-96 h-96 rounded-full pointer-events-none opacity-[0.04] -z-10"
-        style={{ background: 'radial-gradient(circle, #a78bfa 0%, transparent 70%)', transform: 'translate(30%, -30%)' }} />
-      <div className="fixed bottom-0 left-0 w-80 h-80 rounded-full pointer-events-none opacity-[0.04] -z-10"
-        style={{ background: 'radial-gradient(circle, #22d3ee 0%, transparent 70%)', transform: 'translate(-30%, 30%)' }} />
-
-      <header className="sticky top-0 z-50" style={{ background: 'rgba(10,10,15,0.85)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+    <div className="min-h-screen pb-24" style={{ background: '#EEF3FA', color: '#111827' }}>
+      <header className="sticky top-0 z-50" style={{ background: 'rgba(238,243,250,0.92)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(0,0,0,0.07)' }}>
         <div className="px-4 pt-4 pb-2 flex justify-between items-center">
-          <div className="text-base font-normal tracking-tight text-zinc-100">
-            משפחת{' '}<span style={{ color: '#c4b5fd' }}>פינקלשטיין</span>
+          <div className="text-base font-normal tracking-tight" style={{ color: '#111827' }}>
+            משפחת{' '}<span style={{ color: '#7C3AED' }}>פינקלשטיין</span>
           </div>
           <div className="flex gap-3 items-center">
             {urgentCount > 0 && (
               <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#f87171', boxShadow: '0 0 8px #f87171' }} />
-                <span className="text-xs text-zinc-400">{urgentCount}</span>
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#F97316' }} />
+                <span className="text-xs" style={{ color: '#6B7280' }}>{urgentCount}</span>
               </div>
             )}
             <button onClick={() => openAdd()} title="חדש"
-              className="w-7 h-7 text-base text-zinc-400 hover:text-zinc-100 transition-colors">＋</button>
+              className="w-7 h-7 text-base transition-colors" style={{ color: '#6B7280' }}>＋</button>
             <Link href="/settings/family" title="הגדרות"
-              className="text-sm text-zinc-500 hover:text-zinc-100 transition-colors">⚙</Link>
+              className="text-sm transition-colors" style={{ color: '#9CA3AF' }}>⚙</Link>
             <button onClick={signOut} title="התנתק"
-              className="text-sm text-zinc-500 hover:text-zinc-100 transition-colors">⏏</button>
+              className="text-sm transition-colors" style={{ color: '#9CA3AF' }}>⏏</button>
           </div>
         </div>
 
-        {/* Tabs — text + underline */}
+        {/* Tabs */}
         <div className="flex px-4 gap-6">
           {TABS.map(t => {
             const active = tab === t.id
@@ -110,8 +104,8 @@ export default function Home() {
               <button key={t.id} onClick={() => setTab(t.id)}
                 className="py-3 text-sm transition-colors relative"
                 style={{
-                  color: active ? '#e4e4e7' : '#71717a',
-                  borderBottom: active ? '2px solid #e4e4e7' : '2px solid transparent',
+                  color: active ? '#111827' : '#9CA3AF',
+                  borderBottom: active ? '2px solid #3B82F6' : '2px solid transparent',
                 }}>
                 {t.label}
               </button>
@@ -133,8 +127,8 @@ export default function Home() {
       </main>
 
       <button onClick={() => openAdd()}
-        className="fixed bottom-5 left-5 z-40 w-12 h-12 rounded-full flex items-center justify-center text-zinc-300 hover:text-zinc-100 transition-colors"
-        style={{ background: '#18181b', border: '1px solid #3f3f46' }}
+        className="fixed bottom-5 left-5 z-40 w-12 h-12 rounded-full flex items-center justify-center transition-colors"
+        style={{ background: '#3B82F6', color: '#fff', boxShadow: '0 4px 14px rgba(59,130,246,0.4)' }}
         title="מטלה חדשה">
         <span className="text-xl leading-none">＋</span>
       </button>

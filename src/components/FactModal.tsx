@@ -46,7 +46,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-const inputCls = 'w-full px-3 py-2 rounded-lg text-sm outline-none bg-transparent text-zinc-100 border border-zinc-700 focus:border-zinc-500 transition-colors'
+const inputCls = 'w-full px-3 py-2 rounded-lg text-sm outline-none bg-white border border-gray-200 focus:border-blue-400 transition-colors'
+  // color: #111827 set via globals.css overrides
 
 export default function FactModal({ kind, initial, members, onSave, onDelete, onClose }: Props) {
   // Generic state — fields are conditional below.
@@ -92,10 +93,10 @@ export default function FactModal({ kind, initial, members, onSave, onDelete, on
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="w-full max-w-lg rounded-xl p-6 pb-8 animate-slide-up overflow-y-auto max-h-[90vh]" style={{ background: '#0a0a0f', border: '1px solid rgba(255,255,255,0.08)' }}>
+      <div className="w-full max-w-lg rounded-xl p-6 pb-8 animate-slide-up overflow-y-auto max-h-[90vh]" style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 8px 32px rgba(0,0,0,0.1)' }}>
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-lg font-normal tracking-tight text-zinc-100">{title}</h2>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg text-zinc-500 hover:text-zinc-100 transition-colors">✕</button>
+          <h2 className="text-lg font-medium tracking-tight" style={{ color: '#111827' }}>{title}</h2>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg transition-colors" style={{ color: '#9CA3AF' }}>✕</button>
         </div>
 
         <div className="space-y-4">
@@ -138,8 +139,8 @@ export default function FactModal({ kind, initial, members, onSave, onDelete, on
                         }}
                         className="flex-1 py-2 rounded-lg text-xs transition-colors"
                         style={active
-                          ? { background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.5)', color: '#c4b5fd' }
-                          : { border: '1px solid rgba(255,255,255,0.08)', color: '#71717a' }}>
+                          ? { background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.4)', color: '#3B82F6' }
+                          : { border: '1px solid rgba(0,0,0,0.1)', color: '#6B7280' }}>
                         {bt === 'monthly' ? 'חודשי' : 'שנתי'}
                       </button>
                     )
@@ -196,8 +197,8 @@ export default function FactModal({ kind, initial, members, onSave, onDelete, on
                       <button key={d.val} type="button" onClick={() => toggleDay(d.val)}
                         className="flex-1 py-2 rounded-lg text-xs transition-colors"
                         style={active
-                          ? { background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.5)', color: '#c4b5fd' }
-                          : { border: '1px solid rgba(255,255,255,0.08)', color: '#71717a' }}>
+                          ? { background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.4)', color: '#3B82F6' }
+                          : { border: '1px solid rgba(0,0,0,0.1)', color: '#6B7280' }}>
                         {d.label}
                       </button>
                     )
@@ -221,9 +222,9 @@ export default function FactModal({ kind, initial, members, onSave, onDelete, on
               className="px-3 py-2.5 rounded-lg text-xs text-zinc-500 hover:text-red-400 transition-colors">🗑 מחק</button>
           )}
           <div className="flex-1" />
-          <button onClick={onClose} className="px-4 py-2.5 rounded-lg text-sm text-zinc-400 hover:text-zinc-100 transition-colors">ביטול</button>
-          <button onClick={save} className="px-5 py-2.5 rounded-lg text-sm text-zinc-100 transition-colors"
-            style={{ background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.5)' }}>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-lg text-sm transition-colors" style={{ color: '#6B7280' }}>ביטול</button>
+          <button onClick={save} className="px-5 py-2.5 rounded-lg text-sm text-white transition-colors"
+            style={{ background: '#3B82F6' }}>
             שמור
           </button>
         </div>

@@ -9,11 +9,12 @@ export type BotIntent = 'read' | 'create' | 'update' | 'unknown'
 export type BotModule = 'tasks' | 'vehicles' | 'subscriptions' | 'schedules' | null
 
 export interface BotAction {
-  table: 'vehicles' | 'subscriptions' | 'schedules'
-  op: 'insert' | 'update'
+  table: 'vehicles' | 'subscriptions' | 'schedules' | 'tasks'
+  op: 'insert' | 'update' | 'done_pick'
   row_id: string | null
   fields: Record<string, unknown>
   needs_confirmation: boolean
+  task_ids?: string[]   // used by done_pick
 }
 
 export interface BotResult {

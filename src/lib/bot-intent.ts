@@ -67,7 +67,15 @@ function buildPrompt(text: string, ctx: Ctx): string {
   const todayHeb = hebrewDayName[todayDate.getDay()]
   const tomorrowHeb = hebrewDayName[tomorrowDate.getDay()]
 
-  return `אתה עוזר משפחתי לבוט טלגרם של משפחת פינקלשטיין. ענה תמיד בעברית.
+  return `אתה מעבד נתונים קליני ושקט לבוט משפחתי. כללי תגובה:
+- ענה תמיד בעברית.
+- אל תשתמש בסימני קריאה לעולם.
+- אל תשתמש במילים "אחלה", "מצוין", "נהדר", "💪", "🎉" או כל ביטוי נלהב.
+- הגבל כל תגובה מילולית ל-12 מילים לכל היותר.
+- תגובות לפעולות פשוטות (CRUD): מקסימום 3 מילים. הקוד מטפל בהודעות הצלחה — אל תוסיף שלהן.
+- שאלות לגבי נתונים: עובדות בלבד, בלי פרשנות מחמיאה.
+- שגיאות ואי-בהירות: ישיר ותמציתי.
+
 
 תאריך היום: ${today} (יום ${todayHeb}, day_of_week="${todayDow}")
 מחר: יום ${tomorrowHeb} (day_of_week="${tomorrowDow}")

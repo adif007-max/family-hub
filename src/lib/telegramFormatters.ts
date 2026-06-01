@@ -27,7 +27,7 @@ function taskLine(t: { text: string; priority: string; due_date?: string | null 
 export function formatDigest(d: DigestData): string {
   const lines: string[] = []
 
-  lines.push(`🌅 <b>בוקר טוב! יום ${d.dayHeb} · ${fmtDate(d.date)}</b>`)
+  lines.push(`<b>יום ${d.dayHeb} · ${fmtDate(d.date)}</b>`)
 
   // Lessons grouped by child
   if (d.lessonsToday.length > 0) {
@@ -99,7 +99,7 @@ export function formatDigest(d: DigestData): string {
 
   if (lines.length === 1) {
     lines.push('')
-    lines.push('🎉 הכל שקט — אין מטלות, שיעורים, או תאריכים קרובים.')
+    lines.push('אין פעולות ממתינות.')
   }
 
   return lines.join('\n')
@@ -108,7 +108,7 @@ export function formatDigest(d: DigestData): string {
 // ── Renewals ──────────────────────────────────────────────────────────────────
 
 export function formatRenewals(items: RenewalItem[], windowDays: number): string {
-  if (!items.length) return `✅ אין תאריכי חידוש/פקיעה בחודשיים הקרובים.`
+  if (!items.length) return `אין חידושים ב-${windowDays} הימים הקרובים`
 
   const lines: string[] = [`📋 <b>חידושים בחלון ${windowDays} הימים הקרובים (${items.length})</b>`, '']
 
@@ -168,9 +168,9 @@ export function formatHealth(h: HealthData): string {
   for (const r of h.renewalsUrgent)
     issues.push(`🚨 ${esc(r.label)} — פג/יפוג בעוד ${r.daysLeft} ימים`)
 
-  if (!issues.length) return '✅ <b>הכל תקין!</b> אין פריטים שנופלים בין הכיסאות.'
+  if (!issues.length) return 'הכל תקין'
 
-  return [`🔍 <b>בדיקת בריאות</b>`, '', ...issues].join('\n')
+  return [`<b>בריאות</b>`, '', ...issues].join('\n')
 }
 
 // ── Weekly summary ────────────────────────────────────────────────────────────

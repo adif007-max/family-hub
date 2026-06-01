@@ -5,11 +5,86 @@ import { processBotMessage, BotAction } from '@/lib/bot-intent'
 import { buildDailyDigest, israelToday } from '@/lib/digest'
 import { buildWeekSummary } from '@/lib/weekSummary'
 import { getUpcomingRenewals } from '@/lib/renewals'
-import { formatDigest, formatWeekSummary, formatDoneList, formatRenewals, formatHealth, HealthData, esc } from '@/lib/telegramFormatters'
+import { formatDigest, formatWeekSummary, formatRenewals, formatHealth, HealthData, esc } from '@/lib/telegramFormatters'
 import { isDoneIntent, matchDoneText } from '@/lib/doneMatcher'
 
 const CONFIRM_RE = /^(כן|אישור|אשר|אשר?י|yes|y|ok|אוקיי)\.?$/i
-const NUMBER_RE = /^\d+$/
+const NUMBER_RE  = /^\d+$/
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface TgMessage {
+  message_id: number
+  text?: string
+  chat: { id: number }
+}
+interface TgCallbackQuery {
+  id: string
+  message: { message_id: number; chat: { id: number } }
+  data?: string
+}
+interface TgUpdate {
+  update_id: number
+  message?: TgMessage
+  callback_query?: TgCallbackQuery
+}
+
+// ── Telegram API ──────────────────────────────────────────────────────────────
+
+const TG = (m: string) => `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/${m}`
+
+async function tgPost(method: string, body: Record<string, unknown>) {
+  return fetch(TG(method), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+async function sendMessage(chatId: number, text: string) {
+  await tgPost('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true })
+}
+
+// sendMessageWithKeyboard — inline keyboard buttons
+// buttons: [[{text, data}]] — rows of columns
+async function sendWithKeyboard(
+  chatId: number,
+  text: string,
+  buttons: { text: string; data: string }[][]
+) {
+  await tgPost('sendMessage', {
+    chat_id: chatId,
+    text,
+    parse_mode: 'HTML',
+    disable_web_page_preview: true,
+    reply_markup: {
+      inline_keyboard: buttons.map(row =>
+        row.map(b => ({ text: b.text, callback_data: b.data }))
+      ),
+    },
+  })
+}
+
+async function editMessage(chatId: number, messageId: number, text: string) {
+  await tgPost('editMessageText', {
+    chat_id: chatId, message_id: messageId, text,
+    parse_mode: 'HTML', disable_web_page_preview: true,
+  }).catch(() => { /* silently ignore if message too old */ })
+}
+
+async function answerCallback(callbackId: string) {
+  await tgPost('answerCallbackQuery', { callback_query_id: callbackId }).catch(() => {})
+}
+
+// Silent reaction — falls back gracefully if unsupported
+async function reactOk(chatId: number, messageId: number) {
+  await tgPost('setMessageReaction', {
+    chat_id: chatId,
+    message_id: messageId,
+    reaction: [{ type: 'emoji', emoji: '✅' }],
+    is_big: false,
+  }).catch(() => { /* reactions not supported or rate-limited — silently ignore */ })
+}
 
 // ── Pending store ─────────────────────────────────────────────────────────────
 
@@ -20,18 +95,15 @@ async function getPending(chatId: number): Promise<{ action: BotAction; reply: s
     .eq('chat_id', chatId)
     .maybeSingle()
   if (!data) return null
-  const ageMs = Date.now() - new Date(data.created_at).getTime()
-  if (ageMs > 5 * 60 * 1000) {
+  if (Date.now() - new Date(data.created_at).getTime() > 5 * 60_000) {
     await supabaseAdmin.from('pending_bot_updates').delete().eq('chat_id', chatId)
     return null
   }
   return { action: data.action as BotAction, reply: data.reply as string }
 }
-
 async function clearPending(chatId: number) {
   await supabaseAdmin.from('pending_bot_updates').delete().eq('chat_id', chatId)
 }
-
 async function savePending(chatId: number, action: BotAction, reply: string) {
   await supabaseAdmin.from('pending_bot_updates').upsert({
     chat_id: chatId, action, reply, created_at: new Date().toISOString(),
@@ -41,9 +113,11 @@ async function savePending(chatId: number, action: BotAction, reply: string) {
 // ── DB actions ────────────────────────────────────────────────────────────────
 
 async function executeAction(action: BotAction, familyId: string): Promise<{ ok: boolean; error?: string }> {
-  if (action.op === 'done_pick') return { ok: false, error: 'done_pick must be handled upstream' }
+  if (action.op === 'done_pick') return { ok: false, error: 'done_pick handled upstream' }
   if (action.op === 'insert') {
-    const { error } = await supabaseAdmin.from(action.table as 'vehicles' | 'subscriptions' | 'schedules').insert({ ...action.fields, family_id: familyId })
+    const { error } = await supabaseAdmin
+      .from(action.table as 'vehicles' | 'subscriptions' | 'schedules')
+      .insert({ ...action.fields, family_id: familyId })
     if (error) return { ok: false, error: error.message }
   } else {
     if (!action.row_id) return { ok: false, error: 'row_id חסר' }
@@ -56,56 +130,42 @@ async function executeAction(action: BotAction, familyId: string): Promise<{ ok:
   return { ok: true }
 }
 
-async function markTaskDone(taskId: string): Promise<{ ok: boolean; error?: string }> {
+async function markTaskDone(taskId: string): Promise<{ ok: boolean; text?: string; error?: string }> {
+  // Fetch text first for ACK
+  const { data: td } = await supabaseAdmin.from('tasks').select('text').eq('id', taskId).maybeSingle()
   const { error } = await supabaseAdmin
     .from('tasks')
     .update({ done: true, done_at: new Date().toISOString() })
     .eq('id', taskId)
   if (error) return { ok: false, error: error.message }
-  return { ok: true }
+  return { ok: true, text: td?.text }
 }
 
-// ── Telegram API ──────────────────────────────────────────────────────────────
+// ── Inline keyboard builders ──────────────────────────────────────────────────
 
-interface TgMessage {
-  message_id: number
-  text?: string
-  chat: { id: number; type: string }
-}
-interface TgUpdate {
-  update_id: number
-  message?: TgMessage
+// /done and "עשיתי X" ambiguous — up to 8 tasks, 1 per row, callback "done:ID"
+function donePriorityIcon(p: string) {
+  return p === 'urgent' ? '🔥' : p === 'soon' ? '⏰' : ''
 }
 
-const TG_API = (method: string) =>
-  `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/${method}`
-
-async function sendMessage(chatId: number, text: string) {
-  await fetch(TG_API('sendMessage'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true }),
+function buildDoneKeyboard(
+  tasks: { id: string; text: string; priority: string; due_date: string | null }[],
+  today: string
+): { text: string; data: string }[][] {
+  return tasks.slice(0, 8).map(t => {
+    const icon = donePriorityIcon(t.priority)
+    const overdue = t.due_date && t.due_date < today ? ' ⚠' : ''
+    const label = `${icon ? icon + ' ' : ''}${t.text.length > 36 ? t.text.slice(0, 35) + '…' : t.text}${overdue}`
+    return [{ text: label, data: `done:${t.id}` }]
   })
 }
 
-// ── Formatters (local) ────────────────────────────────────────────────────────
-
-const CAT_LABEL: Record<string, string> = {
-  medical: 'רפואי 🏥', home: 'בית 🏠', studies: 'לימודים 📚',
-  formal: 'מסגרות 🏫', hobbies: 'חוגים 🎨', finance: 'כספים 💰', miluim: 'מילואים 🪖',
+// confirmation inline keyboard
+function buildConfirmKeyboard(): { text: string; data: string }[][] {
+  return [[{ text: 'אשר ✓', data: 'confirm' }, { text: 'בטל', data: 'cancel' }]]
 }
-const PRI_ICON: Record<string, string> = { urgent: '🔥', soon: '⏰', normal: '📌', low: '· ' }
-const ASGN_LABEL: Record<string, string> = { adi: 'עדי', tahel: 'תהלה', tehila: 'תהלה', both: 'שנינו' }
 
-function fmtDateLocal(iso: string | null): string {
-  if (!iso) return ''
-  const today = israelToday()
-  if (iso === today) return 'היום'
-  const tomorrowD = new Date(today + 'T00:00:00'); tomorrowD.setDate(tomorrowD.getDate() + 1)
-  if (iso === tomorrowD.toISOString().split('T')[0]) return 'מחר'
-  const [, m, d] = iso.split('-')
-  return `${d}/${m}`
-}
+// ── Queries ───────────────────────────────────────────────────────────────────
 
 type Task = {
   id: string; text: string; category: string; priority: string
@@ -113,143 +173,177 @@ type Task = {
 }
 type Member = { id: string; name: string; gender: string | null }
 
-function formatTaskList(title: string, tasks: Task[], members: Member[]): string {
-  if (!tasks.length) return `🎉 אין מטלות ${title}`
-  const memberLabel = (id: string) => {
-    const m = members.find(x => x.id === id)
-    return m ? (m.gender === 'female' ? '👧' : '👦') + ' ' + m.name : ''
-  }
-  const lines = tasks.map(t => {
-    const icon = PRI_ICON[t.priority] || '·'
-    const parts: string[] = [`📁 ${CAT_LABEL[t.category] || t.category}`]
-    if (t.related_member_ids?.length) {
-      const kids = t.related_member_ids.map(memberLabel).filter(Boolean).join(' ')
-      if (kids) parts.push(kids)
-    }
-    if (t.due_date) parts.push(`📅 ${fmtDateLocal(t.due_date)}`)
-    parts.push(`👤 ${ASGN_LABEL[t.assignee] || t.assignee}`)
-    return `${icon} <b>${esc(t.text)}</b>\n   ${parts.join(' · ')}`
-  })
-  return `📋 <b>${title}</b> (${tasks.length} מטלות)\n\n${lines.join('\n\n')}`
-}
-
-// ── Queries ───────────────────────────────────────────────────────────────────
-
 async function queryTasks(familyId: string, filter: 'today' | 'week' | 'urgent' | 'list', role: 'adi' | 'tahel') {
   const today = israelToday()
   const weekEnd = new Date(today + 'T00:00:00'); weekEnd.setDate(weekEnd.getDate() + 7)
   const weekEndStr = weekEnd.toISOString().split('T')[0]
 
   let q = supabaseAdmin
-    .from('tasks')
-    .select('id, text, category, priority, due_date, assignee, done, related_member_ids')
-    .eq('family_id', familyId)
-    .eq('done', false)
+    .from('tasks').select('id,text,category,priority,due_date,assignee,done,related_member_ids')
+    .eq('family_id', familyId).eq('done', false)
 
   if (filter !== 'urgent') q = q.in('assignee', [role, 'both'])
-  if (filter === 'today') q = q.or(`due_date.eq.${today},due_date.lt.${today}`)
-  else if (filter === 'week') q = q.not('due_date', 'is', null).lte('due_date', weekEndStr)
+  if (filter === 'today')   q = q.or(`due_date.eq.${today},due_date.lt.${today}`)
+  else if (filter === 'week')   q = q.not('due_date', 'is', null).lte('due_date', weekEndStr)
   else if (filter === 'urgent') q = q.eq('priority', 'urgent')
 
   const order = filter === 'list'
     ? [{ col: 'priority', asc: true }, { col: 'due_date', asc: true, nullsFirst: false }]
     : [{ col: 'due_date', asc: true, nullsFirst: false }]
   for (const o of order) q = q.order(o.col, { ascending: o.asc, nullsFirst: o.nullsFirst })
-
   const { data } = await q.limit(30)
   return (data || []) as Task[]
 }
 
 async function queryDoneCandidates(familyId: string, role: 'adi' | 'tahel') {
   const today = israelToday()
-  // Prioritise: overdue → today → urgent → recent
   const { data } = await supabaseAdmin
-    .from('tasks')
-    .select('id, text, priority, due_date, assignee')
-    .eq('family_id', familyId)
-    .eq('done', false)
-    .in('assignee', [role, 'both'])
-    .order('due_date', { nullsFirst: false })
-    .limit(20)
+    .from('tasks').select('id,text,priority,due_date,assignee')
+    .eq('family_id', familyId).eq('done', false).in('assignee', [role, 'both'])
+    .order('due_date', { nullsFirst: false }).limit(20)
   const tasks = (data || []) as { id: string; text: string; priority: string; due_date: string | null; assignee: string }[]
-  // Sort: overdue first, then today, then by priority
   return tasks.sort((a, b) => {
     const aOver = a.due_date && a.due_date < today ? -1 : 0
     const bOver = b.due_date && b.due_date < today ? -1 : 0
-    if (aOver !== bOver) return aOver - bOver
-    return 0
-  }).slice(0, 12)
+    return aOver - bOver
+  }).slice(0, 8)
 }
 
 async function loadMembers(familyId: string): Promise<Member[]> {
   const { data } = await supabaseAdmin
-    .from('family_members')
-    .select('id, name, gender')
-    .eq('family_id', familyId)
-    .eq('is_active', true)
+    .from('family_members').select('id,name,gender').eq('family_id', familyId).eq('is_active', true)
   return (data || []) as Member[]
 }
 
-// ── Health check ──────────────────────────────────────────────────────────────
+// ── Formatters (local) ────────────────────────────────────────────────────────
+
+const CAT_LABEL: Record<string, string> = {
+  medical: '🏥', home: '🏠', studies: '📚', formal: '🏫', hobbies: '🎨', finance: '💰', miluim: '🪖',
+}
+const PRI_ICON: Record<string, string> = { urgent: '🔥', soon: '⏰', normal: '', low: '' }
+const ASGN_LABEL: Record<string, string> = { adi: 'עדי', tahel: 'תהלה', tehila: 'תהלה', both: 'שנינו' }
+
+function fmtDate(iso: string | null): string {
+  if (!iso) return ''
+  const today = israelToday()
+  if (iso === today) return 'היום'
+  const t = new Date(today + 'T00:00:00'); t.setDate(t.getDate() + 1)
+  if (iso === t.toISOString().split('T')[0]) return 'מחר'
+  const [, m, d] = iso.split('-')
+  return `${d}/${m}`
+}
+
+function formatTaskList(title: string, tasks: Task[], members: Member[]): string {
+  if (!tasks.length) return `אין מטלות ${title}`
+  const memberLabel = (id: string) => {
+    const m = members.find(x => x.id === id)
+    return m ? (m.gender === 'female' ? '👧' : '👦') + ' ' + m.name : ''
+  }
+  const lines = tasks.map(t => {
+    const icon = PRI_ICON[t.priority]
+    const cat = CAT_LABEL[t.category] || ''
+    const meta: string[] = []
+    if (t.related_member_ids?.length) {
+      const kids = t.related_member_ids.map(memberLabel).filter(Boolean).join(' ')
+      if (kids) meta.push(kids)
+    }
+    if (t.due_date) meta.push(fmtDate(t.due_date))
+    const assignee = t.assignee !== 'both' ? ASGN_LABEL[t.assignee] || t.assignee : ''
+    if (assignee) meta.push(assignee)
+    const metaStr = meta.length ? `  <i>${meta.join(' · ')}</i>` : ''
+    return `${icon ? icon + ' ' : ''}${cat ? cat + ' ' : ''}<b>${esc(t.text)}</b>${metaStr}`
+  })
+  return `<b>${title}</b>\n\n${lines.join('\n')}`
+}
+
+// ── Health check builder ──────────────────────────────────────────────────────
 
 async function buildHealthData(familyId: string): Promise<HealthData> {
   const today = israelToday()
   const cutoff = new Date(today + 'T00:00:00'); cutoff.setDate(cutoff.getDate() - 14)
   const cutoffStr = cutoff.toISOString().split('T')[0]
-
   const [tasksRes, subsRes, renewals] = await Promise.all([
-    supabaseAdmin.from('tasks')
-      .select('id,text,priority,due_date,assignee,created_at')
+    supabaseAdmin.from('tasks').select('id,text,priority,due_date,assignee,created_at')
       .eq('family_id', familyId).eq('done', false),
-    supabaseAdmin.from('subscriptions')
-      .select('name,monthly_cost')
-      .eq('family_id', familyId),
+    supabaseAdmin.from('subscriptions').select('name,monthly_cost').eq('family_id', familyId),
     getUpcomingRenewals(familyId, 7),
   ])
-
   const tasks = (tasksRes.data || []) as { id: string; text: string; priority: string; due_date: string | null; assignee: string; created_at: string }[]
-  const subs = (subsRes.data || []) as { name: string; monthly_cost: number | null }[]
-
-  const overdueCount = tasks.filter(t => t.due_date && t.due_date < today).length
-  const staleCount = tasks.filter(t => !t.due_date && t.created_at < cutoffStr + 'T00:00:00').length
+  const subs  = (subsRes.data  || []) as { name: string; monthly_cost: number | null }[]
+  const overdueCount     = tasks.filter(t => t.due_date && t.due_date < today).length
+  const staleCount       = tasks.filter(t => !t.due_date && t.created_at < cutoffStr + 'T00:00:00').length
   const urgentUnassigned = tasks.filter(t => t.priority === 'urgent' && !t.due_date).length
-
-  const adiCount = tasks.filter(t => t.assignee === 'adi').length
-  const tahelCount = tasks.filter(t => t.assignee === 'tahel').length
+  const adiCount         = tasks.filter(t => t.assignee === 'adi').length
+  const tahelCount       = tasks.filter(t => t.assignee === 'tahel').length
   const overloadedAssignee = adiCount > 8 ? 'adi' : tahelCount > 8 ? 'tahel' : null
-
   const subscriptionsMissingCost = subs.filter(s => s.monthly_cost == null).map(s => s.name)
-  const renewalsUrgent = renewals.filter(r => r.daysLeft <= 7)
-
-  return { staleCount, overdueCount, urgentUnassigned, overloadedAssignee, subscriptionsMissingCost, renewalsUrgent }
+  return { staleCount, overdueCount, urgentUnassigned, overloadedAssignee, subscriptionsMissingCost, renewalsUrgent: renewals.filter(r => r.daysLeft <= 7) }
 }
 
-// ── Renewals keyword detector ─────────────────────────────────────────────────
+const RENEWALS_RE = /מה.*עומד.*לפוג|מה.*צריך.*לחדש|מה.*פוקע|איזה.*מנוי|חידושים.*קרוב|מה.*חייב.*לחדש|תאריכי.*פקיעה|מתי.*ביטוח|מתי.*טסט/i
 
-const RENEWALS_RE = /מה.*עומד.*לפוג|מה.*צריך.*לחדש|מה.*פוקע|איזה.*מנוי|חידושים.*קרוב|מה.*חייב.*לחדש|תאריכי.*פקיעה|מתי.*ביטוח|מתי.*טסט|מה.*עומד.*לפוג/i
+const HELP_TEXT = `<b>פקודות</b>
+/today · /week · /urgent · /list
+/done — סמן כבוצע
+/health — בדיקת בריאות
 
-// ── Help text ─────────────────────────────────────────────────────────────────
+<b>הוספה</b>
+טקסט חופשי — מסווג אוטומטית
+!טקסט — ישירות ל-Inbox
 
-const HELP_TEXT = `👋 שלום! אני בוט ניהול המשפחה.
+<b>בוצע</b>
+"עשיתי X" / "סיימתי X"
 
-<b>פקודות:</b>
-/today — מטלות היום + תקציר בוקר
-/week — סיכום שבועי
-/urgent — מטלות דחופות
-/list — כל המטלות הפתוחות שלי
-/done — סמן מטלה כבוצעה
-/health — בדיקת בריאות — מה נופל בין הכיסאות?
+<b>שאלות</b>
+"מה יש להלל היום?" · "מה עומד לפוג?"`
 
-<b>הוספת מטלה:</b>
-פשוט שלח טקסט — אני אסווג אוטומטית.
-! בהתחלה = קפיצה מיידית ל-Inbox ללא אישור.
-דוגמה: <i>!לחדש דרכון לעוז</i>
+// ── Callback query handler ────────────────────────────────────────────────────
 
-<b>סימון כבוצע:</b>
-"עשיתי קניות" / "סיימתי תור שיניים"
+async function handleCallback(cq: TgCallbackQuery): Promise<void> {
+  const chatId = cq.message.chat.id
+  const msgId  = cq.message.message_id
+  const data   = cq.data || ''
 
-<b>שאלות:</b>
-"מה יש להלל היום?" / "מה עומד לפוג?" / "מתי הטסט?"`
+  await answerCallback(cq.id)
+
+  // done:TASK_UUID — mark task done from inline keyboard
+  if (data.startsWith('done:')) {
+    const taskId = data.slice(5)
+    const res = await markTaskDone(taskId)
+    if (res.ok) {
+      await editMessage(chatId, msgId, `✓ <b>${esc(res.text || 'בוצע')}</b>`)
+    } else {
+      await editMessage(chatId, msgId, `שגיאה: ${res.error || 'לא ידוע'}`)
+    }
+    return
+  }
+
+  // confirm — execute pending action
+  if (data === 'confirm') {
+    const { data: tgUser } = await supabaseAdmin
+      .from('telegram_users').select('family_id').eq('chat_id', chatId).maybeSingle()
+    if (!tgUser) return
+    const pending = await getPending(chatId)
+    if (!pending) { await editMessage(chatId, msgId, 'פג תוקף'); return }
+    const res = await executeAction(pending.action, tgUser.family_id as string)
+    await clearPending(chatId)
+    if (res.ok) {
+      // Extract the data lines from reply (strip question header)
+      const lines = pending.reply.split('\n').filter(l => l.includes('→') || l.includes('→'))
+      await editMessage(chatId, msgId, `עודכן ✓${lines.length ? '\n' + lines.join('\n') : ''}`)
+    } else {
+      await editMessage(chatId, msgId, `שגיאה: ${res.error}`)
+    }
+    return
+  }
+
+  // cancel
+  if (data === 'cancel') {
+    await clearPending(chatId)
+    await editMessage(chatId, msgId, 'בוטל')
+    return
+  }
+}
 
 // ── Main handler ──────────────────────────────────────────────────────────────
 
@@ -260,30 +354,31 @@ export async function POST(req: NextRequest) {
   let update: TgUpdate
   try { update = await req.json() } catch { return NextResponse.json({ ok: true }) }
 
+  // ── Callback queries (button taps) ────────────────────────────────────────
+  if (update.callback_query) {
+    await handleCallback(update.callback_query)
+    return NextResponse.json({ ok: true })
+  }
+
   const msg = update.message
   if (!msg) return NextResponse.json({ ok: true })
 
   const chatId = msg.chat.id
+  const msgId  = msg.message_id
 
   const { data: tgUser } = await supabaseAdmin
-    .from('telegram_users')
-    .select('user_id, family_id, member_role')
-    .eq('chat_id', chatId)
-    .maybeSingle()
+    .from('telegram_users').select('user_id,family_id,member_role').eq('chat_id', chatId).maybeSingle()
   if (!tgUser) return NextResponse.json({ ok: true })
 
   const text = (msg.text || '').trim()
-  if (!text) {
-    await sendMessage(chatId, 'אני תומך רק בטקסט בינתיים 📝')
-    return NextResponse.json({ ok: true })
-  }
+  if (!text) return NextResponse.json({ ok: true })  // silently ignore non-text
 
-  const isCmd = text.startsWith('/')
-  const cmd = isCmd ? text.split(/[\s@]/)[0].toLowerCase() : ''
-  const role = tgUser.member_role as 'adi' | 'tahel'
+  const isCmd    = text.startsWith('/')
+  const cmd      = isCmd ? text.split(/[\s@]/)[0].toLowerCase() : ''
+  const role     = tgUser.member_role as 'adi' | 'tahel'
   const familyId = tgUser.family_id as string
 
-  // ── Commands ─────────────────────────────────────────────────────────────
+  // ── Commands ──────────────────────────────────────────────────────────────
 
   if (cmd === '/start' || cmd === '/help') {
     await sendMessage(chatId, HELP_TEXT)
@@ -295,10 +390,9 @@ export async function POST(req: NextRequest) {
       const digest = await buildDailyDigest(familyId)
       await sendMessage(chatId, formatDigest(digest))
     } catch {
-      // fallback to simple task list
-      const tasks = await queryTasks(familyId, 'today', role)
+      const tasks   = await queryTasks(familyId, 'today', role)
       const members = await loadMembers(familyId)
-      await sendMessage(chatId, formatTaskList('היום + באיחור', tasks, members))
+      await sendMessage(chatId, formatTaskList('היום', tasks, members))
     }
     return NextResponse.json({ ok: true })
   }
@@ -308,43 +402,45 @@ export async function POST(req: NextRequest) {
       const summary = await buildWeekSummary(familyId)
       await sendMessage(chatId, formatWeekSummary(summary))
     } catch {
-      const tasks = await queryTasks(familyId, 'week', role)
+      const tasks   = await queryTasks(familyId, 'week', role)
       const members = await loadMembers(familyId)
-      await sendMessage(chatId, formatTaskList('השבוע הקרוב', tasks, members))
+      await sendMessage(chatId, formatTaskList('השבוע', tasks, members))
     }
     return NextResponse.json({ ok: true })
   }
 
   if (cmd === '/urgent') {
-    const tasks = await queryTasks(familyId, 'urgent', role)
+    const tasks   = await queryTasks(familyId, 'urgent', role)
     const members = await loadMembers(familyId)
-    await sendMessage(chatId, formatTaskList('דחוף 🔥', tasks, members))
+    await sendMessage(chatId, formatTaskList('דחוף', tasks, members))
     return NextResponse.json({ ok: true })
   }
 
   if (cmd === '/list') {
-    const tasks = await queryTasks(familyId, 'list', role)
+    const tasks   = await queryTasks(familyId, 'list', role)
     const members = await loadMembers(familyId)
-    await sendMessage(chatId, formatTaskList('כל המטלות שלי', tasks, members))
+    await sendMessage(chatId, formatTaskList('מטלות', tasks, members))
     return NextResponse.json({ ok: true })
   }
 
-  // /done — show numbered list of open tasks
+  // /done — inline keyboard + numeric fallback
   if (cmd === '/done') {
     const tasks = await queryDoneCandidates(familyId, role)
-    const today = israelToday()
-    const reply = formatDoneList(tasks, today)
-    if (tasks.length) {
-      await savePending(chatId, {
-        table: 'tasks', op: 'done_pick', row_id: null, fields: {},
-        needs_confirmation: false, task_ids: tasks.map(t => t.id),
-      }, reply)
+    if (!tasks.length) {
+      await sendMessage(chatId, 'אין מטלות פתוחות')
+      return NextResponse.json({ ok: true })
     }
-    await sendMessage(chatId, reply)
+    const today    = israelToday()
+    const keyboard = buildDoneKeyboard(tasks, today)
+    // Save for numeric fallback
+    await savePending(chatId, {
+      table: 'tasks', op: 'done_pick', row_id: null, fields: {},
+      needs_confirmation: false, task_ids: tasks.map(t => t.id),
+    }, '')
+    await sendWithKeyboard(chatId, 'סמן כבוצע:', keyboard)
     return NextResponse.json({ ok: true })
   }
 
-  // /health — family health check
   if (cmd === '/health') {
     const health = await buildHealthData(familyId)
     await sendMessage(chatId, formatHealth(health))
@@ -352,53 +448,46 @@ export async function POST(req: NextRequest) {
   }
 
   if (isCmd) {
-    await sendMessage(chatId, 'פקודה לא מוכרת. שלח /help לרשימת פקודות.')
+    await sendMessage(chatId, 'פקודה לא מוכרת. /help')
     return NextResponse.json({ ok: true })
   }
 
-  // ── Pending interactions ──────────────────────────────────────────────────
+  // ── Numeric reply → done_pick fallback ───────────────────────────────────
 
-  // Number reply → pick from done_pick list
   if (NUMBER_RE.test(text)) {
     const pending = await getPending(chatId)
-    if (pending && pending.action.op === 'done_pick' && pending.action.task_ids?.length) {
-      const idx = parseInt(text) - 1
+    if (pending?.action.op === 'done_pick' && pending.action.task_ids?.length) {
+      const idx     = parseInt(text) - 1
       const taskIds = pending.action.task_ids
       if (idx >= 0 && idx < taskIds.length) {
         const res = await markTaskDone(taskIds[idx])
         await clearPending(chatId)
         if (res.ok) {
-          // Get task text for confirmation
-          const { data: td } = await supabaseAdmin.from('tasks').select('text').eq('id', taskIds[idx]).maybeSingle()
-          await sendMessage(chatId, `✅ <b>${esc(td?.text || 'מטלה')}</b> — בוצע!`)
+          await reactOk(chatId, msgId)
+          await sendMessage(chatId, `✓ ${esc(res.text || 'בוצע')}`)
         } else {
-          await sendMessage(chatId, `⚠️ לא הצלחתי לסמן כבוצע: ${res.error}`)
+          await sendMessage(chatId, `שגיאה: ${res.error}`)
         }
       } else {
-        await sendMessage(chatId, `⚠️ מספר לא תקין. בחר בין 1 ל-${taskIds.length}.`)
+        await sendMessage(chatId, `1–${taskIds.length}`)
       }
       return NextResponse.json({ ok: true })
     }
-    // Fall through — could be a real number in free text
   }
 
-  // "כן" confirmation
+  // ── "כן" → confirm pending Haiku action ──────────────────────────────────
+
   if (CONFIRM_RE.test(text)) {
     const pending = await getPending(chatId)
-    if (!pending) {
-      await sendMessage(chatId, 'אין מה לאשר כרגע.')
-      return NextResponse.json({ ok: true })
-    }
+    if (!pending) { await sendMessage(chatId, 'אין מה לאשר'); return NextResponse.json({ ok: true }) }
     const res = await executeAction(pending.action, familyId)
     await clearPending(chatId)
     if (res.ok) {
-      const ack = pending.reply
-        .replace(/^[^\n]*\n/, '✅ עודכן\n')
-        .replace(/\n?שלח ["״'']?כן["״'']? לאישור\.?\s*$/i, '')
-        .trim()
-      await sendMessage(chatId, ack)
+      await reactOk(chatId, msgId)
+      const detail = pending.reply.split('\n').find(l => l.includes('→')) || ''
+      await sendMessage(chatId, `עודכן${detail ? '\n' + detail : ''}`)
     } else {
-      await sendMessage(chatId, `⚠️ העדכון נכשל: ${res.error}`)
+      await sendMessage(chatId, `שגיאה: ${res.error}`)
     }
     return NextResponse.json({ ok: true })
   }
@@ -406,74 +495,65 @@ export async function POST(req: NextRequest) {
   // New message — clear stale pending
   await clearPending(chatId)
 
-  // ── Quick capture: "!text" → straight to sortInbox ────────────────────────
+  // ── Quick capture: !text ──────────────────────────────────────────────────
 
   if (text.startsWith('!')) {
     const raw = text.slice(1).trim()
-    if (!raw) {
-      await sendMessage(chatId, '! — שלח כאן משהו לקפוץ ל-Inbox, למשל: !לחדש דרכון לעוז')
-      return NextResponse.json({ ok: true })
-    }
+    if (!raw) { await sendMessage(chatId, '! + טקסט'); return NextResponse.json({ ok: true }) }
     try {
-      const items = splitMultipleItems(raw)
+      const items  = splitItems(raw)
       const sorted = await sortInbox(items, familyId)
-      if (!sorted.length) {
-        await sendMessage(chatId, '⚠️ לא הצלחתי לסווג. נסה שוב.')
-        return NextResponse.json({ ok: true })
-      }
+      if (!sorted.length) { await sendMessage(chatId, 'שגיאה בסיווג'); return NextResponse.json({ ok: true }) }
+      await supabaseAdmin.from('tasks').insert(
+        sorted.map(s => ({ family_id: familyId, text: s.text, category: s.cat, assignee: s.assignee, priority: s.priority, related_member_ids: s.related_member_ids }))
+      )
+      await reactOk(chatId, msgId)
+      // Short ACK: one line per task
       const members = await loadMembers(familyId)
-      const inserts = sorted.map(s => ({
-        family_id: familyId, text: s.text, category: s.cat,
-        assignee: s.assignee, priority: s.priority, related_member_ids: s.related_member_ids,
-      }))
-      await supabaseAdmin.from('tasks').insert(inserts)
       const lines = sorted.map(s => {
         const kids = s.related_member_ids
-          .map(id => members.find(m => m.id === id))
-          .filter(Boolean)
-          .map(m => (m!.gender === 'female' ? '👧' : '👦') + ' ' + m!.name)
-          .join(' ')
-        return `✅ <b>${esc(s.text)}</b>${kids ? ` · ${kids}` : ''}`
+          .map(id => members.find(m => m.id === id)?.name).filter(Boolean).join(', ')
+        return `✓ ${esc(s.text)}${kids ? ` · ${kids}` : ''}`
       })
       await sendMessage(chatId, lines.join('\n'))
-    } catch (e) {
-      console.error('quick capture error', e)
-      await sendMessage(chatId, '⚠️ שגיאה. נסה שוב.')
-    }
+    } catch { await sendMessage(chatId, 'שגיאה') }
     return NextResponse.json({ ok: true })
   }
 
-  // ── "עשיתי X" done-text matching ─────────────────────────────────────────
+  // ── "עשיתי X" → done matching ────────────────────────────────────────────
 
   if (isDoneIntent(text)) {
     const candidates = await queryDoneCandidates(familyId, role)
-    const match = matchDoneText(text, candidates)
+    const match      = matchDoneText(text, candidates)
 
     if (match.kind === 'single') {
       const res = await markTaskDone(match.taskId)
       if (res.ok) {
-        await sendMessage(chatId, `✅ <b>${esc(match.taskText)}</b> — בוצע!`)
+        await reactOk(chatId, msgId)
+        await sendMessage(chatId, `✓ ${esc(match.taskText)}`)
       } else {
-        await sendMessage(chatId, `⚠️ לא הצלחתי לסמן: ${res.error}`)
+        await sendMessage(chatId, `שגיאה: ${res.error}`)
       }
       return NextResponse.json({ ok: true })
     }
 
     if (match.kind === 'multiple') {
-      const today = israelToday()
-      const reply = `מצאתי כמה מטלות תואמות — איזו?\n\n` + formatDoneList(match.tasks, today)
+      const today    = israelToday()
+      const keyboard = buildDoneKeyboard(match.tasks, today)
       await savePending(chatId, {
         table: 'tasks', op: 'done_pick', row_id: null, fields: {},
         needs_confirmation: false, task_ids: match.tasks.map(t => t.id),
-      }, reply)
-      await sendMessage(chatId, reply)
+      }, '')
+      await sendWithKeyboard(chatId, 'איזו מטלה?', keyboard)
       return NextResponse.json({ ok: true })
     }
 
-    // No match — fall through to Haiku
+    // No match — fall through to Haiku (might be a question)
+    await sendMessage(chatId, 'לא נמצאה משימה')
+    return NextResponse.json({ ok: true })
   }
 
-  // ── Renewals keyword — deterministic, no Haiku ────────────────────────────
+  // ── Renewals — deterministic ──────────────────────────────────────────────
 
   if (RENEWALS_RE.test(text)) {
     const windowDays = text.includes('חודש') ? 30 : text.includes('שנה') ? 365 : 60
@@ -482,73 +562,61 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // ── Free-text → Haiku brain ───────────────────────────────────────────────
+  // ── Free-text → Haiku ────────────────────────────────────────────────────
 
   try {
     const result = await processBotMessage(text, familyId)
 
     if (result.create_task) {
-      const items = splitMultipleItems(text)
+      const items  = splitItems(text)
       const sorted = await sortInbox(items, familyId)
-      if (!sorted.length) {
-        await sendMessage(chatId, '⚠️ לא הצלחתי לסווג. נסה שוב.')
-        return NextResponse.json({ ok: true })
-      }
+      if (!sorted.length) { await sendMessage(chatId, 'שגיאה בסיווג'); return NextResponse.json({ ok: true }) }
       const members = await loadMembers(familyId)
-      const inserts = sorted.map(s => ({
-        family_id: familyId, text: s.text, category: s.cat,
-        assignee: s.assignee, priority: s.priority, related_member_ids: s.related_member_ids,
-      }))
-      await supabaseAdmin.from('tasks').insert(inserts)
-
-      const replyLines = sorted.map(s => {
+      await supabaseAdmin.from('tasks').insert(
+        sorted.map(s => ({ family_id: familyId, text: s.text, category: s.cat, assignee: s.assignee, priority: s.priority, related_member_ids: s.related_member_ids }))
+      )
+      await reactOk(chatId, msgId)
+      const lines = sorted.map(s => {
         const kids = s.related_member_ids
-          .map(id => members.find(m => m.id === id))
-          .filter(Boolean)
-          .map(m => (m!.gender === 'female' ? '👧' : '👦') + ' ' + m!.name)
-          .join(' ')
-        const parts = [
-          `📁 ${CAT_LABEL[s.cat] || s.cat}`,
-          `${PRI_ICON[s.priority]} ${s.priority === 'urgent' ? 'דחוף' : s.priority === 'soon' ? 'השבוע' : 'רגיל'}`,
-          `👤 ${ASGN_LABEL[s.assignee]}`,
-        ]
-        if (kids) parts.push(kids)
-        return `✅ <b>${esc(s.text)}</b>\n   ${parts.join(' · ')}`
+          .map(id => members.find(m => m.id === id)?.name).filter(Boolean).join(', ')
+        const pri  = s.priority === 'urgent' ? ' 🔥' : s.priority === 'soon' ? ' ⏰' : ''
+        return `✓ ${esc(s.text)}${pri}${kids ? ` · ${kids}` : ''}`
       })
-      await sendMessage(chatId, replyLines.join('\n\n'))
+      await sendMessage(chatId, lines.join('\n'))
       return NextResponse.json({ ok: true })
     }
 
+    // Action with confirmation — inline keyboard instead of text "כן"
     if (result.action && result.action.needs_confirmation) {
       await savePending(chatId, result.action, result.reply)
-      await sendMessage(chatId, result.reply)
+      await sendWithKeyboard(chatId, result.reply, buildConfirmKeyboard())
       return NextResponse.json({ ok: true })
     }
 
     if (result.action) {
       const res = await executeAction(result.action, familyId)
       if (res.ok) {
-        await sendMessage(chatId, result.reply)
+        await reactOk(chatId, msgId)
+        await sendMessage(chatId, 'נשמר')
       } else {
-        await sendMessage(chatId, `⚠️ הפעולה נכשלה: ${res.error}`)
+        await sendMessage(chatId, `שגיאה: ${res.error}`)
       }
       return NextResponse.json({ ok: true })
     }
 
+    // Read / unknown — Haiku reply (already short per prompt)
     await sendMessage(chatId, result.reply)
   } catch (e) {
-    console.error('telegram free-text error', e)
-    await sendMessage(chatId, '⚠️ שגיאה. נסה שוב.')
+    console.error('telegram handler error', e)
+    await sendMessage(chatId, 'שגיאה')
   }
 
   return NextResponse.json({ ok: true })
 }
 
-// ── Multi-item splitter ───────────────────────────────────────────────────────
-// Split "לקנות חלב, לקבוע תור, לשלם ביטוח" into 3 items.
-// Only splits when there are clear separators AND multiple meaningful segments.
-function splitMultipleItems(text: string): string[] {
-  // Split on ", " or " + " or " ו" at start of word, but only if result has 2+ items > 5 chars
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function splitItems(text: string): string[] {
   const parts = text
     .split(/,\s*|\s+\+\s+|\s+וגם\s+|\s+וכן\s+/)
     .map(p => p.trim().replace(/^ו/, '').trim())

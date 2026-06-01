@@ -415,10 +415,12 @@ export async function POST(req: NextRequest) {
     .from('telegram_users').select('user_id,family_id,member_role').eq('chat_id', chatId).maybeSingle()
   if (!tgUser) return NextResponse.json({ ok: true })
 
-  const text = (msg.text || '').trim()
-  if (!text) return NextResponse.json({ ok: true })  // silently ignore non-text
+  const rawText = (msg.text || '').trim()
+  if (!rawText) return NextResponse.json({ ok: true })  // silently ignore non-text
 
-  const isCmd    = text.startsWith('/')
+  // Strip pasted structured output — keep only the last action line
+  const text  = extractCommand(rawText)
+  const isCmd = text.startsWith('/')
   const cmd      = isCmd ? text.split(/[\s@]/)[0].toLowerCase() : ''
   const role     = tgUser.member_role as 'adi' | 'tahel'
   const familyId = tgUser.family_id as string
@@ -706,6 +708,32 @@ export async function POST(req: NextRequest) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// List-output emojis that indicate pasted structured content
+const STRUCTURED_EMOJI_RE = /[📋🛒🔥⏰📅👤📁🏥🏠📚🏫🎨💰🪖🚗💳👧👦✅⚠]/
+
+/**
+ * When a user pastes structured bot output followed by a command on the last line,
+ * extract just the command. Example:
+ *   "📋 מטלות:\n🛒 לקנות חלב\n\nסמן אלה בוצעו"
+ *   → "סמן אלה בוצעו"
+ *
+ * Only activates when:
+ * - message is multi-line
+ * - upper lines contain structured emojis (looks like pasted output)
+ * - last line is a short action phrase (< 80 chars, no structured emojis)
+ */
+function extractCommand(raw: string): string {
+  if (!raw.includes('\n')) return raw
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean)
+  if (lines.length < 2) return raw
+  const lastLine = lines[lines.length - 1]
+  const bodyLines = lines.slice(0, -1)
+  const bodyLooksFormatted = bodyLines.some(l => STRUCTURED_EMOJI_RE.test(l))
+  const lastLooksLikeCommand = lastLine.length < 80 && !STRUCTURED_EMOJI_RE.test(lastLine)
+  if (bodyLooksFormatted && lastLooksLikeCommand) return lastLine
+  return raw
+}
 
 /** Deterministic confirm message — no Haiku needed for this */
 function buildConfirmMessage(action: BotAction): string {

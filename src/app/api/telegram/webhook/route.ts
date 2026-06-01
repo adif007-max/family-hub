@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { sortInbox } from '@/lib/sort-inbox'
-import { processBotMessage, BotAction } from '@/lib/bot-intent'
+import { extractIntent, generateReply, BotAction, ActionOutcome } from '@/lib/bot-intent'
 import { buildDailyDigest, israelToday } from '@/lib/digest'
 import { buildWeekSummary } from '@/lib/weekSummary'
 import { getUpcomingRenewals } from '@/lib/renewals'
@@ -352,7 +352,7 @@ async function handleCallback(cq: TgCallbackQuery): Promise<void> {
     return
   }
 
-  // confirm — execute pending action
+  // confirm — execute pending action, then Call 2 for the reply
   if (data === 'confirm') {
     const { data: tgUser } = await supabaseAdmin
       .from('telegram_users').select('family_id').eq('chat_id', chatId).maybeSingle()
@@ -362,9 +362,17 @@ async function handleCallback(cq: TgCallbackQuery): Promise<void> {
     const res = await executeAction(pending.action, tgUser.family_id as string)
     await clearPending(chatId)
     if (res.ok) {
-      // Extract the data lines from reply (strip question header)
-      const lines = pending.reply.split('\n').filter(l => l.includes('→') || l.includes('→'))
-      await editMessage(chatId, msgId, `עודכן ✓${lines.length ? '\n' + lines.join('\n') : ''}`)
+      const userText = pending.action.user_text || ''
+      const outcome: ActionOutcome = {
+        op: pending.action.op as 'insert' | 'update',
+        success: true,
+        snapshot: JSON.stringify(pending.action.fields),
+      }
+      // Call 2: warm reply with actual data
+      const reply = userText
+        ? await generateReply(userText, outcome).catch(() => 'עודכן')
+        : 'עודכן'
+      await editMessage(chatId, msgId, reply)
     } else {
       await editMessage(chatId, msgId, `שגיאה: ${res.error}`)
     }
@@ -525,8 +533,10 @@ export async function POST(req: NextRequest) {
     await clearPending(chatId)
     if (res.ok) {
       await reactOk(chatId, msgId)
-      const detail = pending.reply.split('\n').find(l => l.includes('→')) || ''
-      await sendMessage(chatId, `עודכן${detail ? '\n' + detail : ''}`)
+      const userText = pending.action.user_text || ''
+      const outcome: ActionOutcome = { op: pending.action.op as 'insert' | 'update', success: true, snapshot: JSON.stringify(pending.action.fields) }
+      const reply = userText ? await generateReply(userText, outcome).catch(() => 'עודכן') : 'עודכן'
+      await sendMessage(chatId, reply)
     } else {
       await sendMessage(chatId, `שגיאה: ${res.error}`)
     }
@@ -603,12 +613,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // ── Free-text → Haiku ────────────────────────────────────────────────────
+  // ── Free-text → Two-call Haiku ───────────────────────────────────────────
+  // Call 1: structured decision only (no reply text for write intents)
+  // Call 2: warm contextual reply after DB action, no tools=
 
   try {
-    const result = await processBotMessage(text, familyId)
+    const decision = await extractIntent(text, familyId)
 
-    if (result.create_task) {
+    // Read / unknown — Call 1 already has the answer
+    if (decision.intent === 'read' || decision.intent === 'unknown') {
+      await sendMessage(chatId, decision.read_reply || 'לא הבנתי')
+      return NextResponse.json({ ok: true })
+    }
+
+    // create_task → sortInbox → Call 2 narrates
+    if (decision.create_task) {
       const items  = splitItems(text)
       const sorted = await sortInbox(items, familyId)
       if (!sorted.length) { await sendMessage(chatId, 'שגיאה בסיווג'); return NextResponse.json({ ok: true }) }
@@ -617,37 +636,40 @@ export async function POST(req: NextRequest) {
         sorted.map(s => ({ family_id: familyId, text: s.text, category: s.cat, assignee: s.assignee, priority: s.priority, related_member_ids: s.related_member_ids }))
       )
       await reactOk(chatId, msgId)
-      const lines = sorted.map(s => {
-        const kids = s.related_member_ids
-          .map(id => members.find(m => m.id === id)?.name).filter(Boolean).join(', ')
-        const pri  = s.priority === 'urgent' ? ' 🔥' : s.priority === 'soon' ? ' ⏰' : ''
-        return `✓ ${esc(s.text)}${pri}${kids ? ` · ${kids}` : ''}`
-      })
-      await sendMessage(chatId, lines.join('\n'))
+      const snapshot = JSON.stringify(sorted.map(s => ({
+        text: s.text, priority: s.priority, assignee: s.assignee,
+        kids: s.related_member_ids.map(id => members.find(m => m.id === id)?.name).filter(Boolean),
+      })))
+      const reply = await generateReply(text, { op: 'create_task', success: true, snapshot })
+      await sendMessage(chatId, reply)
       return NextResponse.json({ ok: true })
     }
 
-    // Action with confirmation — inline keyboard instead of text "כן"
-    if (result.action && result.action.needs_confirmation) {
-      const confirmText = sanitizeReply(result.reply)
-      await savePending(chatId, result.action, confirmText)
-      await sendWithKeyboard(chatId, confirmText, buildConfirmKeyboard())
+    // Action needs confirmation — store user_text, show deterministic confirm message
+    if (decision.action && decision.action.needs_confirmation) {
+      const actionWithText = { ...decision.action, user_text: text }
+      const confirmMsg = buildConfirmMessage(decision.action)
+      await savePending(chatId, actionWithText, confirmMsg)
+      await sendWithKeyboard(chatId, confirmMsg, buildConfirmKeyboard())
       return NextResponse.json({ ok: true })
     }
 
-    if (result.action) {
-      const res = await executeAction(result.action, familyId)
-      if (res.ok) {
-        await reactOk(chatId, msgId)
-        await sendMessage(chatId, 'נשמר')
-      } else {
-        await sendMessage(chatId, `שגיאה: ${res.error}`)
+    // Direct action → execute → Call 2 narrates
+    if (decision.action) {
+      const res     = await executeAction(decision.action, familyId)
+      await reactOk(chatId, msgId)
+      const outcome: ActionOutcome = {
+        op: decision.action.op as 'insert' | 'update',
+        success: res.ok,
+        error: res.error,
+        snapshot: res.ok ? JSON.stringify(decision.action.fields) : undefined,
       }
+      const reply = await generateReply(text, outcome)
+      await sendMessage(chatId, reply)
       return NextResponse.json({ ok: true })
     }
 
-    // Read / unknown — sanitize Haiku reply before sending
-    await sendMessage(chatId, sanitizeReply(result.reply))
+    await sendMessage(chatId, decision.read_reply || 'לא הבנתי')
   } catch (e) {
     console.error('telegram handler error', e)
     await sendMessage(chatId, 'שגיאה')
@@ -657,6 +679,17 @@ export async function POST(req: NextRequest) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Deterministic confirm message — no Haiku needed for this */
+function buildConfirmMessage(action: BotAction): string {
+  const fields = action.fields as Record<string, unknown>
+  const lines: string[] = ['האם לעדכן?']
+  for (const [k, v] of Object.entries(fields)) {
+    if (k === 'updated_at') continue
+    lines.push(`${k}: ${v}`)
+  }
+  return lines.join('\n')
+}
 
 function splitItems(text: string): string[] {
   const parts = text

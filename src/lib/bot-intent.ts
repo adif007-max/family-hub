@@ -1,9 +1,16 @@
-// Bot brain — one Haiku call per user message. Receives full family context,
-// returns a classified intent + user-facing reply + optional DB action.
+// Two-call bot architecture:
+//   Call 1 (extractIntent)  — structured JSON decision only, no reply text
+//   Call 2 (generateReply)  — conversational reply only, no tools=, knows actual outcome
+//
+// Read queries use only Call 1 (context already loaded → answer in read_reply).
+// Write operations use both: Call 1 decides, TypeScript executes, Call 2 narrates.
+
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from './supabase-admin'
 
 const client = new Anthropic()
+
+// ── Public types ──────────────────────────────────────────────────────────────
 
 export type BotIntent = 'read' | 'create' | 'update' | 'unknown'
 export type BotModule = 'tasks' | 'vehicles' | 'subscriptions' | 'schedules' | null
@@ -14,16 +21,30 @@ export interface BotAction {
   row_id: string | null
   fields: Record<string, unknown>
   needs_confirmation: boolean
-  task_ids?: string[]   // used by done_pick
+  task_ids?: string[]    // done_pick
+  user_text?: string     // stored in pending so Call 2 can narrate after confirm
 }
 
-export interface BotResult {
+/** Result of Call 1 — NO reply text for write intents */
+export interface BotDecision {
   intent: BotIntent
   module: BotModule
-  reply: string
   action: BotAction | null
   create_task: boolean
+  /** Populated only for intent='read'. Bypass Call 2. */
+  read_reply?: string
 }
+
+/** What actually happened — passed to Call 2 */
+export interface ActionOutcome {
+  op: 'insert' | 'update' | 'create_task' | 'none'
+  success: boolean
+  error?: string
+  /** Brief JSON of the record(s) touched — helps Call 2 be specific */
+  snapshot?: string
+}
+
+// ── Context loader ────────────────────────────────────────────────────────────
 
 interface Ctx {
   vehicles: unknown[]
@@ -39,176 +60,205 @@ async function loadContext(familyId: string): Promise<Ctx> {
     supabaseAdmin.from('vehicles').select('*').eq('family_id', familyId),
     supabaseAdmin.from('subscriptions').select('*').eq('family_id', familyId),
     supabaseAdmin.from('schedules').select('*').eq('family_id', familyId),
-    supabaseAdmin.from('lessons').select('*').eq('family_id', familyId).order('day_of_week').order('start_time'),
+    supabaseAdmin.from('lessons').select('*').eq('family_id', familyId)
+      .order('day_of_week').order('start_time'),
     supabaseAdmin.from('family_members').select('*').eq('family_id', familyId).eq('is_active', true),
     supabaseAdmin.from('tasks')
       .select('id,text,category,priority,due_date,assignee,done,related_member_ids')
-      .eq('family_id', familyId).eq('done', false).order('due_date', { nullsFirst: false }).limit(40),
+      .eq('family_id', familyId).eq('done', false)
+      .order('due_date', { nullsFirst: false }).limit(40),
   ])
   return {
-    vehicles: v.data || [],
-    subscriptions: s.data || [],
-    schedules: sc.data || [],
-    lessons: les.data || [],
-    members: m.data || [],
-    tasks: t.data || [],
+    vehicles:      v.data   || [],
+    subscriptions: s.data   || [],
+    schedules:     sc.data  || [],
+    lessons:       les.data || [],
+    members:       m.data   || [],
+    tasks:         t.data   || [],
   }
 }
 
-function buildPrompt(text: string, ctx: Ctx): string {
-  const today = new Date().toISOString().split('T')[0]
-  // Compute day-of-week string for today and tomorrow (for lessons lookup)
-  const todayDate = new Date()
-  const tomorrowDate = new Date(todayDate); tomorrowDate.setDate(tomorrowDate.getDate() + 1)
-  const dayNames = ['sun','mon','tue','wed','thu','fri','sat']
-  const todayDow = dayNames[todayDate.getDay()]
-  const tomorrowDow = dayNames[tomorrowDate.getDay()]
-  const hebrewDayName = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת']
-  const todayHeb = hebrewDayName[todayDate.getDay()]
-  const tomorrowHeb = hebrewDayName[tomorrowDate.getDay()]
+// ── Call 1: Intent extraction ─────────────────────────────────────────────────
 
-  return `אתה מעבד נתונים קליני ושקט לבוט משפחתי. כללי תגובה:
-- ענה תמיד בעברית.
-- אל תשתמש בסימני קריאה לעולם.
-- אל תשתמש במילים "אחלה", "מצוין", "נהדר", "💪", "🎉" או כל ביטוי נלהב.
-- הגבל כל תגובה מילולית ל-12 מילים לכל היותר.
-- תגובות לפעולות פשוטות (CRUD): מקסימום 3 מילים. הקוד מטפל בהודעות הצלחה — אל תוסיף שלהן.
-- שאלות לגבי נתונים: עובדות בלבד, בלי פרשנות מחמיאה.
-- שגיאות ואי-בהירות: ישיר ותמציתי.
+function buildIntentPrompt(text: string, ctx: Ctx): string {
+  const today       = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' })
+  const todayDate   = new Date(today + 'T12:00:00')
+  const tomorrowD   = new Date(today + 'T12:00:00'); tomorrowD.setDate(tomorrowD.getDate() + 1)
+  const DAYS        = ['sun','mon','tue','wed','thu','fri','sat']
+  const HEB_LONG    = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת']
+  const todayDow    = DAYS[todayDate.getDay()]
+  const tomorrowDow = DAYS[tomorrowD.getDay()]
 
+  return `אתה מנוע החלטה של בוט משפחתי. תפקידך: לנתח את הכוונה ולהחזיר JSON בלבד.
+אל תנסח תשובה — Python נפרד מטפל בזה.
 
-תאריך היום: ${today} (יום ${todayHeb}, day_of_week="${todayDow}")
-מחר: יום ${tomorrowHeb} (day_of_week="${tomorrowDow}")
-
-המרת ימי שבוע: ראשון=sun, שני=mon, שלישי=tue, רביעי=wed, חמישי=thu, שישי=fri
+תאריך: ${today} (יום ${HEB_LONG[todayDate.getDay()]}, dow="${todayDow}")
+מחר: ${HEB_LONG[tomorrowD.getDay()]} (dow="${tomorrowDow}")
 
 נתוני המשפחה:
+רכבים: ${JSON.stringify(ctx.vehicles, null, 1)}
+מנויים: ${JSON.stringify(ctx.subscriptions, null, 1)}
+לו"ז: ${JSON.stringify(ctx.schedules, null, 1)}
+מערכת שעות (day_of_week=sun/mon/tue/wed/thu/fri): ${JSON.stringify(ctx.lessons, null, 1)}
+ילדים: ${JSON.stringify(ctx.members, null, 1)}
+מטלות פתוחות: ${JSON.stringify(ctx.tasks, null, 1)}
 
-רכבים:
-${JSON.stringify(ctx.vehicles, null, 1)}
+הודעה: "${text}"
 
-מנויים:
-${JSON.stringify(ctx.subscriptions, null, 1)}
-
-לו"ז (חוגים ופעילויות):
-${JSON.stringify(ctx.schedules, null, 1)}
-
-מערכת שעות (שיעורי בית ספר — כל שיעור שורה נפרדת, day_of_week=sun/mon/tue/wed/thu/fri):
-${JSON.stringify(ctx.lessons, null, 1)}
-
-ילדים (active):
-${JSON.stringify(ctx.members, null, 1)}
-
-מטלות פתוחות (עד 40):
-${JSON.stringify(ctx.tasks, null, 1)}
-
-ההודעה שהמשתמש שלח:
-"${text}"
-
-נתח את הכוונה והחזר JSON בלבד (בלי backticks, בלי הסבר), במבנה:
-
+החזר JSON בלבד — ללא backticks:
 {
   "intent": "read" | "create" | "update" | "unknown",
   "module": "tasks" | "vehicles" | "subscriptions" | "schedules" | null,
-  "reply": "טקסט בעברית שיוצג למשתמש בטלגרם (HTML של Telegram מותר: <b>, <i>)",
-  "action": null או {
+  "action": null | {
     "table": "vehicles" | "subscriptions" | "schedules",
     "op": "insert" | "update",
-    "row_id": "uuid מהנתונים שהוצגו לך, או null עבור insert",
+    "row_id": "uuid או null",
     "fields": { ... },
     "needs_confirmation": true | false
   },
-  "create_task": true | false
+  "create_task": true | false,
+  "read_reply": "תשובה בעברית — רק עבור intent=read, אחרת null"
 }
 
 כללים:
-1. read (שאלה): שלוף מהנתונים, פרמט יפה ב-reply. action=null, create_task=false.
-   שאלות לוח שעות ("מה יש להלל היום?", "מה יש להלל מחר?", "מה יש לרחל ביום חמישי?", "מתי הלל מסיים?"):
-   - זהה את הילד לפי שם (חפש ב-members)
-   - זהה את היום: "היום"→todayDow, "מחר"→tomorrowDow, "ביום ראשון/שני/..."→sun/mon/...
-   - סנן את lessons לפי child_id + day_of_week, מיין לפי start_time
-   - reply לשאלה מלאה:
-     📚 <b>שם · יום X · בית ספר</b>
-     HH:MM–HH:MM · מקצוע (מורה)
-     ...
-     סיום ב-HH:MM
-   - reply ל"מתי מסיים?" — רק: "הלל מסיים היום ב-HH:MM"
-   - אם אין שיעורים ביום זה: "אין שיעורים להלל ביום X"
-2. create + מטלה: create_task=true, action=null. ה-reply יהיה "✅ מוסיף..." קצר — pipeline חיצוני יטפל בסיווג. module="tasks".
-3. create + רכב/מנוי/לו"ז: action.op="insert", table=המודול הנכון. כתוב fields ישירות (אל תכלול family_id, השרת מוסיף). reply = "✅ נוסף..." עם פרטים. needs_confirmation=false (יצירה לא דורשת אישור).
-   מנוי חודשי: הכנס billing_type="monthly" ו-billing_day_of_month=<מספר יום>, ואל תכניס renewal_date.
-   מנוי שנתי: הכנס billing_type="yearly" ו-renewal_date=<תאריך ISO>, ואל תכניס billing_day_of_month.
-4. update: action.op="update", row_id=ה-id מהנתונים שהוצגו לך. fields=רק השדות שמשתנים. needs_confirmation=true אם השינוי משמעותי (תאריך, מחיר, מספר טלפון, סטטוס פוליסה). reply במקרה הזה יציג "האם לעדכן?\n<old> → <new>\nשלח 'כן' לאישור." (שורה נפרדת לכל חלק). needs_confirmation=false רק לתיקוני הקלדה קטנים או notes.
-5. שאלה מעורפלת (2+ רשומות אפשריות): intent="read", action=null, reply=מציג רשימה ושואל "איזה?".
-6. רשומה לא קיימת ("מתי הטסט?" ואין רכבים): intent="read", reply="אין רכבים במאגר. הוסף דרך לשונית 'מידע' באתר."
-7. לא הבנתי: intent="unknown", reply=הצעות (דוגמאות: "מתי הטסט?", "כמה אני משלם על מנויים?", "תוסיף תור שיניים", "מה יש להלל היום?").
+1. read — שלוף ופרמט ב-read_reply. action=null, create_task=false.
+   שאלות לוח שעות: סנן lessons לפי child_id + day_of_week, מיין start_time.
+   פורמט: <b>שם · יום X · בית ספר</b>\\nHH:MM–HH:MM · מקצוע\\nסיום ב-HH:MM
+2. create + מטלה: create_task=true, action=null, read_reply=null.
+3. create + רכב/מנוי/לו"ז: action.op="insert". אל תכלול family_id. read_reply=null.
+   מנוי חודשי: billing_type="monthly", billing_day_of_month=N.
+   מנוי שנתי: billing_type="yearly", renewal_date=ISO.
+4. update: action.op="update", row_id=uuid. needs_confirmation=true אם שינוי משמעותי. read_reply=null.
+5. מעורפל / לא קיים: intent="read", read_reply=שאלה/הסבר קצר. action=null.
+6. לא הבנתי: intent="unknown", read_reply=הצעות קצרות.
 
-פורמט תאריכים בעברית: DD/MM/YYYY. ימים: א, ב, ג, ד, ה, ו, ש. שמות חודשים בעברית כשמתאים.
-חישוב "בעוד X ימים" בקפדנות מ-${today}.
-לסיכומי כספים — כלול גם שנתי (מחודש × 12).
-
-דוגמאות פורמט reply (העתק את המבנה, החלף ערכים):
-
-📚 <b>הלל · יום שני · ת"ת נווה</b>
-08:00–10:00 · תורה (הרב נדב)
-10:20–11:50 · עברית (הרב נדב)
-12:05–13:30 · תורה (הרב נדב)
-
-סיום ב-13:30
-
-הלל מסיים היום ב-13:30
-
-
-🚗 <b>סקודה קודיאק 2019</b>
-טסט: 05/07/2026 (בעוד 41 ימים)
-ביטוח: 31/07/2026
-
-💳 <b>מנויים פעילים</b>
-• ספוטיפיי · 32.90₪/חודש · מחויב ביום 3 בכל חודש
-• נטפליקס · 60.00₪/חודש · מחויב ביום 15 בכל חודש
-• אנטיוירוס · 120₪/שנה · חידוש 01/09/2026
-─────
-סה"כ: <b>92.90₪/חודש</b>
-שנתי: 1,114.80₪
-
-👧 <b>רחל</b>
-🏫 גן חובה
-ימים: ב, ג, ד, ה · 07:30-13:00
-
-האם לעדכן?
-סקודה קודיאק — טסט: <b>05/07/2026</b> → <b>15/08/2026</b>
-שלח "כן" לאישור.
-
-✅ עודכן: סקודה קודיאק
-טסט: 15/08/2026`
+פורמט תאריכים: DD/MM/YYYY. סיכומי כספים — כלול שנתי.
+חישוב ימים מ-${today}.`
 }
 
-export async function processBotMessage(text: string, familyId: string, timeoutMs = 6000): Promise<BotResult> {
-  const ctx = await loadContext(familyId)
-  const prompt = buildPrompt(text, ctx)
+// ── Call 2: Reply generation ──────────────────────────────────────────────────
+
+const REPLY_SYSTEM = `אתה עוזר משפחתי. פעולה כבר בוצעה — תפקידך רק לנסח תגובה.
+
+כללים:
+- 1-2 משפטים בעברית. לא יותר.
+- אשר את מה שנעשה בפועל (לפי snapshot שקיבלת).
+- הוסף הקשר שימושי אם יש: תאריך קרוב, עלות, שם ילד.
+- אם נכשל — הסבר קצר מה קרה + הצעה לפעולה.
+- טון: חבר קצר, לא רובוט. אפשר להיות חם.
+- אין סימני קריאה. אין מילות שבח ("מצוין", "אחלה").
+- אין לשאול "האם לשמור?" — כבר נשמר.`
+
+function buildReplyPrompt(userText: string, outcome: ActionOutcome): string {
+  const parts = [`הודעת משתמש: "${userText}"`]
+
+  if (outcome.success) {
+    parts.push(`הפעולה הצליחה (${outcome.op})`)
+    if (outcome.snapshot) parts.push(`נתונים שנשמרו: ${outcome.snapshot}`)
+  } else {
+    parts.push(`הפעולה נכשלה: ${outcome.error || 'שגיאה לא ידועה'}`)
+  }
+
+  parts.push('כתוב תגובה קצרה למשתמש.')
+  return parts.join('\n')
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
+
+export async function extractIntent(
+  text: string,
+  familyId: string,
+  timeoutMs = 5000
+): Promise<BotDecision> {
+  const ctx  = await loadContext(familyId)
+  const prompt = buildIntentPrompt(text, ctx)
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   let response
   try {
     response = await client.messages.create(
-      { model: 'claude-haiku-4-5', max_tokens: 1024, messages: [{ role: 'user', content: prompt }] },
+      {
+        model: 'claude-haiku-4-5',
+        max_tokens: 1024,
+        system: [{ type: 'text', text: 'החזר JSON בלבד. ללא backticks, ללא הסברים.', cache_control: { type: 'ephemeral' } }],
+        messages: [{ role: 'user', content: prompt }],
+      },
       { signal: controller.signal }
     )
   } finally {
     clearTimeout(timer)
   }
 
-  const raw = (response.content[0] as { type: string; text: string }).text.trim()
+  const raw     = (response.content[0] as { type: string; text: string }).text.trim()
   const cleaned = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
-  const parsed = JSON.parse(cleaned) as Partial<BotResult>
 
-  // Normalize defensively
+  let parsed: Partial<BotDecision & { read_reply?: string | null }> = {}
+  try { parsed = JSON.parse(cleaned) } catch {
+    return { intent: 'unknown', module: null, action: null, create_task: false,
+             read_reply: 'לא הצלחתי לעבד. נסה שוב.' }
+  }
+
   return {
-    intent: (parsed.intent || 'unknown') as BotIntent,
-    module: (parsed.module ?? null) as BotModule,
-    reply: parsed.reply || 'לא הצלחתי להבין. נסה שוב.',
-    action: parsed.action ?? null,
+    intent:      (parsed.intent || 'unknown') as BotIntent,
+    module:      (parsed.module ?? null) as BotModule,
+    action:      (parsed.action as BotAction) ?? null,
     create_task: Boolean(parsed.create_task),
+    read_reply:  parsed.read_reply || undefined,
+  }
+}
+
+export async function generateReply(
+  userText: string,
+  outcome: ActionOutcome,
+  timeoutMs = 3000
+): Promise<string> {
+  const prompt = buildReplyPrompt(userText, outcome)
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  let response
+  try {
+    response = await client.messages.create(
+      {
+        model: 'claude-haiku-4-5',
+        max_tokens: 256,
+        system: REPLY_SYSTEM,
+        messages: [{ role: 'user', content: prompt }],
+      },
+      { signal: controller.signal }
+    )
+  } catch {
+    return outcome.success ? 'נשמר' : 'שגיאה'
+  } finally {
+    clearTimeout(timer)
+  }
+
+  return (response.content[0] as { type: string; text: string }).text.trim()
+}
+
+// ── Legacy shim — keeps existing webhook compiling during transition ──────────
+// Remove once webhook is fully migrated.
+export interface BotResult {
+  intent: BotIntent
+  module: BotModule
+  reply: string
+  action: BotAction | null
+  create_task: boolean
+}
+
+/** @deprecated Use extractIntent + generateReply instead */
+export async function processBotMessage(
+  text: string,
+  familyId: string,
+  timeoutMs = 6000
+): Promise<BotResult> {
+  const decision = await extractIntent(text, familyId, timeoutMs)
+  return {
+    intent:      decision.intent,
+    module:      decision.module,
+    reply:       decision.read_reply || '',
+    action:      decision.action,
+    create_task: decision.create_task,
   }
 }

@@ -153,16 +153,41 @@ function buildDoneKeyboard(
   today: string
 ): { text: string; data: string }[][] {
   return tasks.slice(0, 8).map(t => {
-    const icon = donePriorityIcon(t.priority)
+    const icon   = donePriorityIcon(t.priority)
     const overdue = t.due_date && t.due_date < today ? ' ⚠' : ''
-    const label = `${icon ? icon + ' ' : ''}${t.text.length > 36 ? t.text.slice(0, 35) + '…' : t.text}${overdue}`
-    return [{ text: label, data: `done:${t.id}` }]
+    const label   = `${icon ? icon + ' ' : ''}${t.text.length > 36 ? t.text.slice(0, 35) + '…' : t.text}${overdue}`
+    // callback_data max 64 bytes — "done:" (5) + UUID (36) = 41 bytes, always safe
+    const data    = `done:${t.id}`.slice(0, 64)
+    return [{ text: label, data }]
   })
 }
 
 // confirmation inline keyboard
 function buildConfirmKeyboard(): { text: string; data: string }[][] {
   return [[{ text: 'אשר ✓', data: 'confirm' }, { text: 'בטל', data: 'cancel' }]]
+}
+
+// ── Reply sanitizer ───────────────────────────────────────────────────────────
+// Applied to Haiku free-text replies only (not to structured summaries).
+// Structured = contains newlines or HTML tags → leave as-is.
+
+const ENTHUSIASTIC_RE = /(!(?!\s*$|\n))|(\b(אחלה|מצוין|נהדר|פנטסטי|מעולה|כל הכבוד|ברכות|יופי)\b)/gi
+const EXCLAIM_TRAIL   = /\s*!+\s*$/g
+
+function sanitizeReply(text: string): string {
+  const isStructured = text.includes('\n') || text.includes('<b>') || text.includes('<i>')
+  if (isStructured) return text  // structured summaries — do not truncate
+
+  // Strip exclamation marks and enthusiastic phrases
+  let s = text
+    .replace(ENTHUSIASTIC_RE, '')
+    .replace(EXCLAIM_TRAIL, '')
+    .trim()
+
+  // Enforce ≤ 200 chars for simple replies (12-ish words in Hebrew)
+  if (s.length > 200) s = s.slice(0, 200).replace(/\s+\S*$/, '') + '…'
+
+  return s || text  // never return empty
 }
 
 // ── Queries ───────────────────────────────────────────────────────────────────
@@ -343,6 +368,9 @@ async function handleCallback(cq: TgCallbackQuery): Promise<void> {
     await editMessage(chatId, msgId, 'בוטל')
     return
   }
+
+  // Unknown callback — stale or from a previous deploy
+  await editMessage(chatId, msgId, 'פג תוקף')
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
@@ -476,10 +504,14 @@ export async function POST(req: NextRequest) {
   }
 
   // ── "כן" → confirm pending Haiku action ──────────────────────────────────
+  // Guard: never try to confirm a done_pick — that's handled by number/button only.
 
   if (CONFIRM_RE.test(text)) {
     const pending = await getPending(chatId)
-    if (!pending) { await sendMessage(chatId, 'אין מה לאשר'); return NextResponse.json({ ok: true }) }
+    if (!pending || pending.action.op === 'done_pick') {
+      // No confirmable pending — ignore silently (don't send noise)
+      return NextResponse.json({ ok: true })
+    }
     const res = await executeAction(pending.action, familyId)
     await clearPending(chatId)
     if (res.ok) {
@@ -588,8 +620,9 @@ export async function POST(req: NextRequest) {
 
     // Action with confirmation — inline keyboard instead of text "כן"
     if (result.action && result.action.needs_confirmation) {
-      await savePending(chatId, result.action, result.reply)
-      await sendWithKeyboard(chatId, result.reply, buildConfirmKeyboard())
+      const confirmText = sanitizeReply(result.reply)
+      await savePending(chatId, result.action, confirmText)
+      await sendWithKeyboard(chatId, confirmText, buildConfirmKeyboard())
       return NextResponse.json({ ok: true })
     }
 
@@ -604,8 +637,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
-    // Read / unknown — Haiku reply (already short per prompt)
-    await sendMessage(chatId, result.reply)
+    // Read / unknown — sanitize Haiku reply before sending
+    await sendMessage(chatId, sanitizeReply(result.reply))
   } catch (e) {
     console.error('telegram handler error', e)
     await sendMessage(chatId, 'שגיאה')

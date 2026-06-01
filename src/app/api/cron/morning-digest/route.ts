@@ -30,6 +30,25 @@ export async function GET(req: NextRequest) {
 
   const today = israelToday()
 
+  // Periodic cleanup — runs on every morning digest invocation
+  // cron_digest_log: keep 14 days
+  const digestCutoff = new Date(today + 'T00:00:00')
+  digestCutoff.setDate(digestCutoff.getDate() - 14)
+  await supabaseAdmin
+    .from('cron_digest_log')
+    .delete()
+    .lt('log_date', digestCutoff.toISOString().split('T')[0])
+    .then(() => {}, () => {}) // non-fatal
+
+  // pending_bot_updates: delete rows older than 30 minutes (belt+suspenders; code expires at 5min)
+  const pendingCutoff = new Date()
+  pendingCutoff.setMinutes(pendingCutoff.getMinutes() - 30)
+  await supabaseAdmin
+    .from('pending_bot_updates')
+    .delete()
+    .lt('created_at', pendingCutoff.toISOString())
+    .then(() => {}, () => {}) // non-fatal
+
   // Get all telegram users
   const { data: tgUsers } = await supabaseAdmin
     .from('telegram_users')

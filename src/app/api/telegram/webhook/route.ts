@@ -334,6 +334,15 @@ async function handleCallback(cq: TgCallbackQuery): Promise<void> {
   // done:TASK_UUID — mark task done from inline keyboard
   if (data.startsWith('done:')) {
     const taskId = data.slice(5)
+    // Verify the task belongs to this chat's family before marking done
+    const { data: tgUser } = await supabaseAdmin
+      .from('telegram_users').select('family_id').eq('chat_id', chatId).maybeSingle()
+    if (!tgUser) { await editMessage(chatId, msgId, 'לא מורשה'); return }
+    const { data: taskRow } = await supabaseAdmin
+      .from('tasks').select('family_id').eq('id', taskId).maybeSingle()
+    if (!taskRow || taskRow.family_id !== tgUser.family_id) {
+      await editMessage(chatId, msgId, 'לא נמצא'); return
+    }
     const res = await markTaskDone(taskId)
     if (res.ok) {
       await editMessage(chatId, msgId, `✓ <b>${esc(res.text || 'בוצע')}</b>`)

@@ -2,6 +2,7 @@
 // Used by bot "מה עומד לפוג?" and health check.
 import { supabaseAdmin } from './supabase-admin'
 import { israelToday, daysFromToday } from './digest'
+import { nextBillingDate } from './billingDate'
 
 export type RenewalKind = 'vehicle_test' | 'vehicle_insurance' | 'sub_monthly' | 'sub_yearly'
 
@@ -49,17 +50,8 @@ export async function getUpcomingRenewals(
   }
 
   for (const s of subsRes.data || []) {
-    let billDate: string | null = null
-    let kind: RenewalKind = 'sub_yearly'
-    if ((s.billing_type || 'yearly') === 'monthly' && s.billing_day_of_month) {
-      kind = 'sub_monthly'
-      const day = s.billing_day_of_month as number
-      const c = new Date(todayD.getFullYear(), todayD.getMonth(), day)
-      if (c <= todayD) c.setMonth(c.getMonth() + 1)
-      billDate = c.toISOString().split('T')[0]
-    } else {
-      billDate = s.renewal_date as string | null
-    }
+    const kind: RenewalKind = (s.billing_type || 'yearly') === 'monthly' ? 'sub_monthly' : 'sub_yearly'
+    const billDate = nextBillingDate(s, today)
     if (!billDate) continue
     const d = daysFromToday(billDate, today)
     if (d >= 0 && d <= windowDays)

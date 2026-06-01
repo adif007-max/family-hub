@@ -1,6 +1,7 @@
 // Daily digest builder — reusable across bot /today and morning cron.
 // All date logic uses Asia/Jerusalem timezone.
 import { supabaseAdmin } from './supabase-admin'
+import { nextBillingDate } from './billingDate'
 
 // ── Timezone helpers ─────────────────────────────────────────────────────────
 
@@ -159,14 +160,7 @@ export async function buildDailyDigest(familyId: string): Promise<DigestData> {
   const upcomingBills: DigestData['upcomingBills'] = []
   for (const s of subsRes.data || []) {
     let billDate: string | null = null
-    if ((s.billing_type || 'yearly') === 'monthly' && s.billing_day_of_month) {
-      const todayD = new Date(today + 'T00:00:00')
-      const c = new Date(todayD.getFullYear(), todayD.getMonth(), s.billing_day_of_month)
-      if (c <= todayD) c.setMonth(c.getMonth() + 1)
-      billDate = c.toISOString().split('T')[0]
-    } else {
-      billDate = s.renewal_date
-    }
+    billDate = nextBillingDate(s, today)
     if (!billDate) continue
     const d = daysFromToday(billDate, today)
     if (d >= 0 && d <= 6)

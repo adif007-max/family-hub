@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Vehicle, Subscription, Schedule, Lesson, FamilyMember, ScheduleActivityType } from '@/lib/types'
 import { useVehicles, useSubscriptions, useSchedules, useLessons } from '@/lib/useFacts'
+import { nextBillingDate as calcNextBilling } from '@/lib/billingDate'
 import FactModal from './FactModal'
 
 interface Props {
@@ -58,21 +59,11 @@ export default function InfoTab({ familyId, members }: Props) {
 
   const subsTotal = subscriptions.reduce((a, s) => a + (s.monthly_cost || 0), 0)
 
-  // Compute next billing date for a subscription (ISO string or null)
-  function nextBillingDate(s: Subscription): string | null {
-    if (s.billing_type === 'monthly' && s.billing_day_of_month) {
-      const today = new Date(); today.setHours(0, 0, 0, 0)
-      const day = s.billing_day_of_month
-      const candidate = new Date(today.getFullYear(), today.getMonth(), day)
-      if (candidate <= today) candidate.setMonth(candidate.getMonth() + 1)
-      return candidate.toISOString().split('T')[0]
-    }
-    return s.renewal_date
-  }
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' })
 
   // Sort subs by next billing date ascending (nulls last)
   const sortedSubs = [...subscriptions].sort((a, b) => {
-    const da = nextBillingDate(a), db = nextBillingDate(b)
+    const da = calcNextBilling(a, today), db = calcNextBilling(b, today)
     if (!da) return 1
     if (!db) return -1
     return da.localeCompare(db)
@@ -130,7 +121,7 @@ export default function InfoTab({ familyId, members }: Props) {
             <div className="text-xs text-zinc-600 py-2">אין מנויים. לחץ ＋</div>
           )}
           {sortedSubs.map(s => {
-            const nbd = nextBillingDate(s)
+            const nbd = calcNextBilling(s, today)
             const billing = fmtDate(nbd)
             const isMonthly = s.billing_type === 'monthly'
             return (

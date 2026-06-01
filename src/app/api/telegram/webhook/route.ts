@@ -114,19 +114,33 @@ async function savePending(chatId: number, action: BotAction, reply: string) {
 
 async function executeAction(action: BotAction, familyId: string): Promise<{ ok: boolean; error?: string }> {
   if (action.op === 'done_pick') return { ok: false, error: 'done_pick handled upstream' }
+
   if (action.op === 'insert') {
     const { error } = await supabaseAdmin
       .from(action.table as 'vehicles' | 'subscriptions' | 'schedules')
       .insert({ ...action.fields, family_id: familyId })
     if (error) return { ok: false, error: error.message }
-  } else {
-    if (!action.row_id) return { ok: false, error: 'row_id חסר' }
-    const { error } = await supabaseAdmin
-      .from(action.table as 'vehicles' | 'subscriptions' | 'schedules')
-      .update({ ...action.fields, updated_at: new Date().toISOString() })
-      .eq('id', action.row_id)
-    if (error) return { ok: false, error: error.message }
+    return { ok: true }
   }
+
+  // Batch update — row_ids array (tasks only)
+  if (action.row_ids?.length) {
+    const { error } = await supabaseAdmin
+      .from('tasks')
+      .update({ ...action.fields, updated_at: new Date().toISOString() })
+      .in('id', action.row_ids)
+      .eq('family_id', familyId)   // ownership guard
+    if (error) return { ok: false, error: error.message }
+    return { ok: true }
+  }
+
+  // Single-row update
+  if (!action.row_id) return { ok: false, error: 'row_id חסר' }
+  const { error } = await supabaseAdmin
+    .from(action.table as 'vehicles' | 'subscriptions' | 'schedules' | 'tasks')
+    .update({ ...action.fields, updated_at: new Date().toISOString() })
+    .eq('id', action.row_id)
+  if (error) return { ok: false, error: error.message }
   return { ok: true }
 }
 

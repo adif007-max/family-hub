@@ -18,11 +18,12 @@ export type BotModule = 'tasks' | 'vehicles' | 'subscriptions' | 'schedules' | n
 export interface BotAction {
   table: 'vehicles' | 'subscriptions' | 'schedules' | 'tasks'
   op: 'insert' | 'update' | 'done_pick'
-  row_id: string | null
+  row_id: string | null         // single-row update
+  row_ids?: string[]            // multi-row batch update (tasks only)
   fields: Record<string, unknown>
   needs_confirmation: boolean
-  task_ids?: string[]    // done_pick
-  user_text?: string     // stored in pending so Call 2 can narrate after confirm
+  task_ids?: string[]           // done_pick list
+  user_text?: string            // stored in pending for Call 2 narration
 }
 
 /** Result of Call 1 — NO reply text for write intents */
@@ -53,10 +54,11 @@ interface Ctx {
   lessons: unknown[]
   members: unknown[]
   tasks: unknown[]
+  recentTasks: unknown[]   // last 8 by created_at — for "מטלות קודמות/אחרונות"
 }
 
 async function loadContext(familyId: string): Promise<Ctx> {
-  const [v, s, sc, les, m, t] = await Promise.all([
+  const [v, s, sc, les, m, t, recent] = await Promise.all([
     supabaseAdmin.from('vehicles').select('*').eq('family_id', familyId),
     supabaseAdmin.from('subscriptions').select('*').eq('family_id', familyId),
     supabaseAdmin.from('schedules').select('*').eq('family_id', familyId),
@@ -67,14 +69,19 @@ async function loadContext(familyId: string): Promise<Ctx> {
       .select('id,text,category,priority,due_date,assignee,done,related_member_ids')
       .eq('family_id', familyId).eq('done', false)
       .order('due_date', { nullsFirst: false }).limit(40),
+    supabaseAdmin.from('tasks')
+      .select('id,text,category,priority,due_date,assignee,done,related_member_ids,created_at')
+      .eq('family_id', familyId).eq('done', false)
+      .order('created_at', { ascending: false }).limit(8),
   ])
   return {
-    vehicles:      v.data   || [],
-    subscriptions: s.data   || [],
-    schedules:     sc.data  || [],
-    lessons:       les.data || [],
-    members:       m.data   || [],
-    tasks:         t.data   || [],
+    vehicles:      v.data      || [],
+    subscriptions: s.data      || [],
+    schedules:     sc.data     || [],
+    lessons:       les.data    || [],
+    members:       m.data      || [],
+    tasks:         t.data      || [],
+    recentTasks:   recent.data || [],
   }
 }
 
@@ -102,6 +109,7 @@ function buildIntentPrompt(text: string, ctx: Ctx): string {
 מערכת שעות (day_of_week=sun/mon/tue/wed/thu/fri): ${JSON.stringify(ctx.lessons, null, 1)}
 ילדים: ${JSON.stringify(ctx.members, null, 1)}
 מטלות פתוחות: ${JSON.stringify(ctx.tasks, null, 1)}
+מטלות שנוספו לאחרונה (לפי created_at, מהחדש לישן): ${JSON.stringify(ctx.recentTasks, null, 1)}
 
 הודעה: "${text}"
 
@@ -110,9 +118,10 @@ function buildIntentPrompt(text: string, ctx: Ctx): string {
   "intent": "read" | "create" | "update" | "unknown",
   "module": "tasks" | "vehicles" | "subscriptions" | "schedules" | null,
   "action": null | {
-    "table": "vehicles" | "subscriptions" | "schedules",
+    "table": "vehicles" | "subscriptions" | "schedules" | "tasks",
     "op": "insert" | "update",
-    "row_id": "uuid או null",
+    "row_id": "uuid — לעדכון שורה בודדת. null אם מעדכן כמה שורות",
+    "row_ids": ["uuid1", "uuid2"] | null,  // לעדכון כמה מטלות בבת אחת
     "fields": { ... },
     "needs_confirmation": true | false
   },
@@ -128,7 +137,10 @@ function buildIntentPrompt(text: string, ctx: Ctx): string {
 3. create + רכב/מנוי/לו"ז: action.op="insert". אל תכלול family_id. read_reply=null.
    מנוי חודשי: billing_type="monthly", billing_day_of_month=N.
    מנוי שנתי: billing_type="yearly", renewal_date=ISO.
-4. update: action.op="update", row_id=uuid. needs_confirmation=true אם שינוי משמעותי. read_reply=null.
+4. update שורה בודדת: action.op="update", row_id=uuid. needs_confirmation=true אם שינוי משמעותי. read_reply=null.
+   update כמה מטלות: table="tasks", row_id=null, row_ids=["uuid1","uuid2",...]. מצא את ה-ids מ"מטלות שנוספו לאחרונה" או מהרשימה.
+   "מטלות קודמות/אחרונות/שהוספתי" → השתמש ב-row_ids מ-recentTasks (שדה created_at הכי גדול).
+   assignee מותר: "adi" | "tahel" | "both".
 5. מעורפל / לא קיים: intent="read", read_reply=שאלה/הסבר קצר. action=null.
 6. לא הבנתי: intent="unknown", read_reply=הצעות קצרות.
 

@@ -248,29 +248,3 @@ export async function generateReply(
 
   return (response.content[0] as { type: string; text: string }).text.trim()
 }
-
-// ── Legacy shim — keeps existing webhook compiling during transition ──────────
-// Remove once webhook is fully migrated.
-export interface BotResult {
-  intent: BotIntent
-  module: BotModule
-  reply: string
-  action: BotAction | null
-  create_task: boolean
-}
-
-/** @deprecated Use extractIntent + generateReply instead */
-export async function processBotMessage(
-  text: string,
-  familyId: string,
-  timeoutMs = 6000
-): Promise<BotResult> {
-  const decision = await extractIntent(text, familyId, timeoutMs)
-  return {
-    intent:      decision.intent,
-    module:      decision.module,
-    reply:       decision.read_reply || '',
-    action:      decision.action,
-    create_task: decision.create_task,
-  }
-}

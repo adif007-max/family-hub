@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Vehicle, Subscription, Schedule, Lesson } from './types'
+import { Vehicle, Subscription, Schedule, Lesson, ScheduleEvent } from './types'
 import { supabase } from './supabase'
 
-type FactRow = Vehicle | Subscription | Schedule | Lesson
+type FactRow = Vehicle | Subscription | Schedule | Lesson | ScheduleEvent
 
-function makeHook<T extends FactRow>(table: 'vehicles' | 'subscriptions' | 'schedules' | 'lessons') {
+function makeHook<T extends FactRow>(table: 'vehicles' | 'subscriptions' | 'schedules' | 'lessons' | 'schedule_events') {
   return function useFactList(familyId: string | null) {
     const [items, setItems] = useState<T[]>([])
     const [loading, setLoading] = useState(true)
@@ -56,7 +56,8 @@ function makeHook<T extends FactRow>(table: 'vehicles' | 'subscriptions' | 'sche
   }
 }
 
-export const useVehicles      = makeHook<Vehicle>('vehicles')
-export const useSubscriptions = makeHook<Subscription>('subscriptions')
-export const useSchedules     = makeHook<Schedule>('schedules')
-export const useLessons       = makeHook<Lesson>('lessons')
+export const useVehicles        = makeHook<Vehicle>('vehicles')
+export const useSubscriptions   = makeHook<Subscription>('subscriptions')
+export const useSchedules       = makeHook<Schedule>('schedules')
+export const useLessons         = makeHook<Lesson>('lessons')
+export const useScheduleEvents  = makeHook<ScheduleEvent>('schedule_events')

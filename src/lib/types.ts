@@ -97,4 +97,15 @@ export const CATEGORIES: { id: Category; name: string; icon: string; color: stri
   { id: 'miluim',   name: 'מילואים',                 icon: '🪖', color: 'slate' },
 ]
 
+export interface ScheduleEvent {
+  id: string
+  family_id: string
+  child_id: string | null
+  title: string
+  event_date: string
+  event_time: string | null
+  notes: string | null
+  created_at: string
+}
+
 export const CHILDREN = ['הלל', 'רחל', 'נעמי', 'עוז']

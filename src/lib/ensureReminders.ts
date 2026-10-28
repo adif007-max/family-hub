@@ -95,7 +95,7 @@ export async function ensureReminders(
 
   const plans: Plan[] = [
     ...vehicles.flatMap(planVehicle),
-    ...subscriptions.flatMap(planSubscription),
+    // subscriptions are auto-charged — no reminders needed
   ]
 
   const fresh = plans.filter(p => !existing.has(`${p.source_fact_table}:${p.source_fact_id}:${p.due_date}`))

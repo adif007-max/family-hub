@@ -12,9 +12,10 @@ import TaskModal from '@/components/TaskModal'
 import TaskBoard from '@/components/TaskBoard'
 import QuickInbox from '@/components/QuickInbox'
 import InfoTab from '@/components/InfoTab'
+import FinanceTab from '@/components/FinanceTab'
 import MagicLinkLogin from '@/components/MagicLinkLogin'
 
-type Tab = 'inbox' | 'tasks' | 'info'
+type Tab = 'inbox' | 'tasks' | 'info' | 'finance'
 
 function Loader() {
   return (
@@ -75,9 +76,10 @@ export default function Home() {
   const dateStr = `${now.getDate()} ${HEB_MONTHS[now.getMonth()]}`
 
   const TABS = [
-    { id: 'inbox' as Tab, label: '📥 Inbox',  badge: 0 },
-    { id: 'tasks' as Tab, label: '✅ מטלות', badge: openCount },
-    { id: 'info'  as Tab, label: '📋 מידע',   badge: 0 },
+    { id: 'inbox'   as Tab, label: '📥 Inbox',  badge: 0 },
+    { id: 'tasks'   as Tab, label: '✅ מטלות', badge: openCount },
+    { id: 'info'    as Tab, label: '📋 מידע',   badge: 0 },
+    { id: 'finance' as Tab, label: '💳 כספים',  badge: 0 },
   ]
 
   return (
@@ -143,9 +145,10 @@ export default function Home() {
           </div>
         ) : (
           <>
-            {tab === 'inbox' && <QuickInbox onAdd={addTask} familyId={familyId} members={members} tasks={tasks} />}
-            {tab === 'tasks' && <TaskBoard  tasks={tasks} members={members} onToggle={toggleDone} onEdit={openEdit} onDelete={deleteTask} onAdd={openAdd} />}
-            {tab === 'info'  && <InfoTab    familyId={familyId} members={members} />}
+            {tab === 'inbox'   && <QuickInbox onAdd={addTask} familyId={familyId} members={members} tasks={tasks} />}
+            {tab === 'tasks'   && <TaskBoard  tasks={tasks} members={members} onToggle={toggleDone} onEdit={openEdit} onDelete={deleteTask} onAdd={openAdd} />}
+            {tab === 'info'    && <InfoTab    familyId={familyId} members={members} />}
+            {tab === 'finance' && <FinanceTab familyId={familyId} />}
           </>
         )}
       </main>
